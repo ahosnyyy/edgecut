@@ -1,0 +1,7 @@
+/* ResultsPanel — minimal print styles only. All visual handled by Tailwind. */
+
+@media print {
+  .print-avoid-break {
+    page-break-inside: avoid;
+  }
+}
