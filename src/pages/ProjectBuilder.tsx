@@ -566,8 +566,6 @@ function BuildingsManager({
             </div>
           </Card>
           {buildings.map((b) => {
-            let labels: string[] = [];
-            try { labels = JSON.parse(b.apartmentLabels); } catch { labels = []; }
             return (
               <Card key={b.id} size="sm" className={`pb-0 cursor-pointer hover:border-primary/40 transition-colors${b.status === "archived" ? " opacity-50" : ""}`} onClick={() => navigate(`/projects/${projectId}/buildings/${b.id}`)}>
                 <CardHeader className="pb-1">
@@ -592,7 +590,7 @@ function BuildingsManager({
                 </CardHeader>
                 <CardFooter className="bg-muted/50 py-2.5">
                   <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
-                    <span>Apts: {labels.join(", ")}</span>
+                    <span>{b.floors * b.apartmentsPerFloor} apartments</span>
                     <Separator orientation="vertical" className="my-0.5" />
                     <span>Created {new Date(b.createdAt).toLocaleDateString("en-GB")}</span>
                   </div>
@@ -943,6 +941,16 @@ function OpeningSizes({
     });
   };
 
+  const handleFillBucket = (openingId: string, width: string, height: string, cells: { floor: number; aptIndex: number }[]) => {
+    setSizes((s) => {
+      const newS = { ...s };
+      for (const { floor, aptIndex } of cells) {
+        newS[`${openingId}_${floor}_${aptIndex}`] = { width, height };
+      }
+      return newS;
+    });
+  };
+
   const handleClearAll = (openingId: string) => {
     setSizes((s) => {
       const newS = { ...s };
@@ -1033,17 +1041,18 @@ function OpeningSizes({
           sizes={sizes}
           onCellChange={handleCellChange}
           onFillAll={handleFillAll}
+          onFillBucket={handleFillBucket}
           onClearAll={handleClearAll}
           openingChips={
-            <div className="flex flex-wrap gap-1.5">
+            <div className="inline-flex items-center gap-0.5 rounded-md bg-muted p-0.5">
               {allOpenings.map((o) => (
                 <button
                   key={o.id}
                   type="button"
-                  className={`px-2.5 py-1 text-xs font-medium rounded-md transition-colors ${
+                  className={`px-3 py-1 text-xs font-medium rounded-md transition-all ${
                     activeOpeningId === o.id
-                      ? "bg-accent text-accent-foreground"
-                      : "text-muted-foreground hover:text-foreground hover:bg-accent/50 border"
+                      ? "bg-background text-foreground shadow-sm"
+                      : "text-muted-foreground hover:text-foreground"
                   }`}
                   onClick={() => setActiveOpeningId(o.id)}
                 >
@@ -1072,7 +1081,7 @@ function OpeningSizes({
 
 function OpeningSizeGrid({
   openingId, openingLabel, floors, apartmentsPerFloor, apartmentLabels,
-  assignmentMap, templateOpeningsMap, sizes, onCellChange, onFillAll, onClearAll, openingChips,
+  assignmentMap, templateOpeningsMap, sizes, onCellChange, onFillAll, onFillBucket, onClearAll, openingChips,
 }: {
   openingId: string;
   openingLabel: string;
@@ -1084,6 +1093,7 @@ function OpeningSizeGrid({
   sizes: SizeGrid;
   onCellChange: (openingId: string, floor: number, aptIndex: number, field: "width" | "height", value: string) => void;
   onFillAll: (openingId: string, width: string, height: string) => void;
+  onFillBucket: (openingId: string, width: string, height: string, cells: { floor: number; aptIndex: number }[]) => void;
   onClearAll: (openingId: string) => void;
   openingChips: ReactNode;
 }) {
@@ -1097,6 +1107,125 @@ function OpeningSizeGrid({
     const openings = templateOpeningsMap[aptTplId] ?? [];
     return openings.some((o) => o.id === openingId);
   };
+
+  // Half-bucket overlap: assign each cell to two offset buckets per dimension,
+  // then union all buckets a cell belongs to. Guarantees values within 1.5cm share a color.
+  const BUCKET_SIZE = 1.5;
+  const HALF_BUCKET = BUCKET_SIZE / 2;
+  const CELL_TINTS = [
+    "ring-blue-400/50",
+    "ring-green-400/50",
+    "ring-amber-400/50",
+    "ring-purple-400/50",
+    "ring-pink-400/50",
+    "ring-cyan-400/50",
+    "ring-orange-400/50",
+    "ring-indigo-400/50",
+  ];
+  const CELL_DOT_COLORS = [
+    "bg-blue-400",
+    "bg-green-400",
+    "bg-amber-400",
+    "bg-purple-400",
+    "bg-pink-400",
+    "bg-cyan-400",
+    "bg-orange-400",
+    "bg-indigo-400",
+  ];
+
+  const { tintMap: cellTintMap, bucketGroups } = useMemo(() => {
+    // Union-find structure
+    const parent = new Map<string, string>();
+    const find = (x: string): string => {
+      if (!parent.has(x)) parent.set(x, x);
+      let root = x;
+      while (parent.get(root) !== root) root = parent.get(root)!;
+      // Path compression
+      let curr = x;
+      while (parent.get(curr) !== root) {
+        const next = parent.get(curr)!;
+        parent.set(curr, root);
+        curr = next;
+      }
+      return root;
+    };
+    const union = (a: string, b: string) => {
+      const ra = find(a), rb = find(b);
+      if (ra !== rb) parent.set(ra, rb);
+    };
+
+    // For each cell, compute 4 bucket keys (2 per dimension: floor and floor+half offset)
+    // and union them together
+    const cellBuckets: Record<string, string[]> = {};
+    for (let f = 0; f < floors; f++) {
+      for (let i = 0; i < apartmentsPerFloor; i++) {
+        const key = `${openingId}_${f}_${i}`;
+        const cell = sizes[key];
+        if (!cell || !cell.width || !cell.height) continue;
+        const w = parseFloat(cell.width);
+        const h = parseFloat(cell.height);
+        if (isNaN(w) || isNaN(h)) continue;
+        const wB1 = Math.floor(w / BUCKET_SIZE);
+        const wB2 = Math.floor((w + HALF_BUCKET) / BUCKET_SIZE);
+        const hB1 = Math.floor(h / BUCKET_SIZE);
+        const hB2 = Math.floor((h + HALF_BUCKET) / BUCKET_SIZE);
+        const buckets = [
+          `${wB1}_${hB1}`, `${wB1}_${hB2}`,
+          `${wB2}_${hB1}`, `${wB2}_${hB2}`,
+        ];
+        cellBuckets[key] = buckets;
+        for (let b = 1; b < buckets.length; b++) union(buckets[0], buckets[b]);
+      }
+    }
+
+    // Union cells that share any bucket
+    const bucketToCells = new Map<string, string[]>();
+    for (const [cellKey, buckets] of Object.entries(cellBuckets)) {
+      for (const b of buckets) {
+        if (!bucketToCells.has(b)) bucketToCells.set(b, []);
+        bucketToCells.get(b)!.push(cellKey);
+      }
+    }
+    for (const cells of bucketToCells.values()) {
+      for (let c = 1; c < cells.length; c++) {
+        union(cellBuckets[cells[0]][0], cellBuckets[cells[c]][0]);
+      }
+    }
+
+    // Assign colors by root and collect bucket groups
+    const rootColorMap = new Map<string, number>();
+    const rootCellsMap = new Map<string, { floor: number; aptIndex: number; w: number; h: number }[]>();
+    let colorIdx = 0;
+    const tintMap: Record<string, string> = {};
+    for (const [cellKey, buckets] of Object.entries(cellBuckets)) {
+      const root = find(buckets[0]);
+      if (!rootColorMap.has(root)) {
+        rootColorMap.set(root, colorIdx % CELL_TINTS.length);
+        colorIdx++;
+      }
+      tintMap[cellKey] = CELL_TINTS[rootColorMap.get(root)!];
+      const parts = cellKey.split("_");
+      const f = parseInt(parts[1]);
+      const i = parseInt(parts[2]);
+      const cell = sizes[cellKey]!;
+      if (!rootCellsMap.has(root)) rootCellsMap.set(root, []);
+      rootCellsMap.get(root)!.push({ floor: f, aptIndex: i, w: parseFloat(cell.width), h: parseFloat(cell.height) });
+    }
+    // Build bucket groups with representative W×H (average) and color
+    const bucketGroups = Array.from(rootColorMap.entries()).map(([root, colorIdx]) => {
+      const cells = rootCellsMap.get(root) ?? [];
+      const avgW = cells.length > 0 ? (cells.reduce((s, c) => s + c.w, 0) / cells.length).toFixed(1) : "";
+      const avgH = cells.length > 0 ? (cells.reduce((s, c) => s + c.h, 0) / cells.length).toFixed(1) : "";
+      return {
+        root,
+        color: CELL_TINTS[colorIdx],
+        dotColor: CELL_DOT_COLORS[colorIdx],
+        label: `${avgW} × ${avgH}`,
+        cells: cells.map((c) => ({ floor: c.floor, aptIndex: c.aptIndex })),
+      };
+    });
+    return { tintMap, bucketGroups };
+  }, [sizes, floors, apartmentsPerFloor, openingId]);
 
   return (
     <div className="flex flex-col gap-2">
@@ -1118,15 +1247,30 @@ function OpeningSizeGrid({
             onChange={(e) => setBulkH(e.target.value)}
             className="w-20 h-7 text-xs"
           />
-          <Button
-            variant="outline"
-            
-            className="h-7 text-xs gap-1.5"
-            onClick={() => bulkW && bulkH && onFillAll(openingId, bulkW, bulkH)}
-          >
-            <HugeiconsIcon icon={PencilRulerIcon} size={12} />
-            Fill All
-          </Button>
+          <Select onValueChange={(v: string | null) => {
+            if (!v) return;
+            if (v === "all") {
+              if (bulkW && bulkH) onFillAll(openingId, bulkW, bulkH);
+            } else {
+              const group = bucketGroups.find((g) => g.root === v);
+              if (group && bulkW && bulkH) onFillBucket(openingId, bulkW, bulkH, group.cells);
+            }
+          }}>
+            <SelectTrigger className="w-40 h-7 text-xs">
+              <span className="text-muted-foreground">Fill all...</span>
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All cells</SelectItem>
+              {bucketGroups.map((g) => (
+                <SelectItem key={g.root} value={g.root}>
+                  <span className="flex items-center gap-1.5">
+                    <span className={`inline-block w-2.5 h-2.5 rounded-full ${g.dotColor}`} />
+                    {g.label} ({g.cells.length})
+                  </span>
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
           <Button
             variant="outline"
             className="h-7 text-xs"
@@ -1157,6 +1301,7 @@ function OpeningSizeGrid({
                   const hasOpening = cellHasOpening(f, i);
                   const key = `${openingId}_${f}_${i}`;
                   const cellSize = sizes[key] ?? { width: "", height: "" };
+                  const tint = cellTintMap[key];
                   return (
                     <TableCell key={i} className="py-3 px-4 text-center">
                       {hasOpening ? (
@@ -1166,7 +1311,7 @@ function OpeningSizeGrid({
                             placeholder="W"
                             value={cellSize.width}
                             onChange={(e) => onCellChange(openingId, f, i, "width", e.target.value)}
-                            className="w-24 h-6 text-xs"
+                            className={`w-24 h-6 text-xs ${tint ? `ring-1 ${tint}` : ""}`}
                           />
                           <span className="text-xs text-muted-foreground">×</span>
                           <Input
@@ -1174,7 +1319,7 @@ function OpeningSizeGrid({
                             placeholder="H"
                             value={cellSize.height}
                             onChange={(e) => onCellChange(openingId, f, i, "height", e.target.value)}
-                            className="w-24 h-6 text-xs"
+                            className={`w-24 h-6 text-xs ${tint ? `ring-1 ${tint}` : ""}`}
                           />
                         </div>
                       ) : (
@@ -1188,6 +1333,10 @@ function OpeningSizeGrid({
           </TableBody>
         </Table>
       </div>
+      <p className="text-xs text-muted-foreground flex items-center gap-1.5">
+        <HugeiconsIcon icon={InformationSquareIcon} size={14} />
+        Cells with similar W×H values (within 1.5cm) share the same ring color.
+      </p>
     </div>
   );
 }
