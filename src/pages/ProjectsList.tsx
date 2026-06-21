@@ -161,9 +161,9 @@ export default function ProjectsList() {
                   </CardHeader>
                   <CardFooter className="bg-muted/50 py-2.5">
                     <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
-                      <span>{p.buildingCount} building{p.buildingCount !== 1 ? "s" : ""}</span>
+                      <span>{p.completedBuildings}/{p.buildingCount} building{p.buildingCount !== 1 ? "s" : ""} completed</span>
                       <Separator orientation="vertical" className="my-0.5" />
-                      <span>{new Date(p.createdAt).toLocaleDateString("en-GB")}</span>
+                      <span>Created {new Date(p.createdAt).toLocaleDateString("en-GB")}</span>
                     </div>
                   </CardFooter>
                 </Card>

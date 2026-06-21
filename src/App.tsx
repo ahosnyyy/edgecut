@@ -8,6 +8,7 @@ import Login from "./pages/Login";
 import QuickOptimize from "./pages/QuickOptimize";
 import ProjectsList from "./pages/ProjectsList";
 import ProjectBuilder from "./pages/ProjectBuilder";
+import BuildingDetailPage from "./pages/BuildingDetailPage";
 import TemplateManager from "./pages/TemplateManager";
 import ApartmentTemplateManager from "./pages/ApartmentTemplateManager";
 import Settings from "./pages/Settings";
@@ -35,9 +36,10 @@ const router = createBrowserRouter([
       </ProtectedRoute>
     ),
     children: [
-      { path: "/quick-optimize", element: <QuickOptimize /> },
+      { path: "/cutting-optimizer", element: <QuickOptimize /> },
       { path: "/projects", element: <ProjectsList /> },
       { path: "/projects/:id", element: <ProjectBuilder /> },
+      { path: "/projects/:id/buildings/:buildingId", element: <BuildingDetailPage /> },
       { path: "/apartment-templates", element: <ApartmentTemplateManager /> },
       { path: "/templates", element: <TemplateManager /> },
       { path: "/settings", element: <Settings /> },
@@ -45,11 +47,11 @@ const router = createBrowserRouter([
   },
   {
     path: "/",
-    element: <Navigate to="/quick-optimize" replace />,
+    element: <Navigate to="/cutting-optimizer" replace />,
   },
   {
     path: "*",
-    element: <Navigate to="/quick-optimize" replace />,
+    element: <Navigate to="/cutting-optimizer" replace />,
   },
 ]);
 

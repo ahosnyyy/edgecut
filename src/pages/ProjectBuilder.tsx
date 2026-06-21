@@ -1,19 +1,16 @@
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, type ReactNode } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useQueries } from "@tanstack/react-query";
 import {
   useProject,
   useUpdateProject,
   useCreateBuilding,
-  useUpdateBuilding,
-  useDeleteBuilding,
   useSaveAssignments,
   useSaveOpeningSizes,
   useDeleteProject,
   useProjectPieces,
   type Project,
 } from "../hooks/useProjects";
-import { useApartmentTemplates } from "../hooks/useApartmentTemplates";
 import { apiFetch } from "../auth/apiClient";
 import { Button } from "../components/ui/button";
 import { Card, CardAction, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "../components/ui/card";
@@ -49,24 +46,19 @@ import {
   Add01Icon,
   AddSquareIcon,
   SaveIcon,
-  ArrowDown01Icon,
+  PencilRulerIcon,
   BuildingIcon,
   AssignmentsIcon,
   RulerIcon,
   PuzzleIcon,
   Settings01Icon,
-  MoreHorizontalCircle01Icon,
-  Edit02Icon,
   InformationSquareIcon,
+  ArrowLeft01Icon,
+  ArrowRight01Icon,
+  ArchiveArrowDownIcon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "../components/ui/tabs";
-import {
-  DropdownMenu,
-  DropdownMenuTrigger,
-  DropdownMenuContent,
-  DropdownMenuItem,
-} from "../components/ui/dropdown-menu";
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "../components/ui/empty";
 import { Tooltip, TooltipTrigger, TooltipContent } from "../components/ui/tooltip";
 
@@ -82,18 +74,14 @@ export default function ProjectBuilder() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { data: project, isLoading } = useProject(id ?? null);
-  const { data: aptTemplates } = useApartmentTemplates();
   const updateMutation = useUpdateProject();
   const deleteMutation = useDeleteProject();
   const createBuildingMutation = useCreateBuilding();
-  const updateBuildingMutation = useUpdateBuilding();
-  const deleteBuildingMutation = useDeleteBuilding();
 
   const [name, setName] = useState("");
   const [client, setClient] = useState("");
   const [status, setStatus] = useState<Project["status"]>("draft");
   const [activeTab, setActiveTab] = useState("buildings");
-  const [activeBuildingId, setActiveBuildingId] = useState<string | null>(null);
 
   useEffect(() => {
     if (project) {
@@ -107,7 +95,7 @@ export default function ProjectBuilder() {
     if (!id) return;
     await updateMutation.mutateAsync({
       id,
-      data: { name, client, status },
+      data: { name, client },
     });
   };
 
@@ -115,6 +103,12 @@ export default function ProjectBuilder() {
     if (!id) return;
     await deleteMutation.mutateAsync(id);
     navigate("/projects");
+  };
+
+  const handleArchive = async () => {
+    if (!id) return;
+    await updateMutation.mutateAsync({ id, data: { status: "archived" } });
+    setStatus("archived");
   };
 
   if (isLoading) {
@@ -134,7 +128,6 @@ export default function ProjectBuilder() {
   }
 
   const buildings = project.buildings ?? [];
-  const activeBuilding = buildings.find((b) => b.id === activeBuildingId) ?? buildings[0] ?? null;
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
@@ -145,18 +138,6 @@ export default function ProjectBuilder() {
               <TabsTrigger value="buildings">
                 <HugeiconsIcon icon={BuildingIcon} size={14} />
                 Buildings
-              </TabsTrigger>
-              <TabsTrigger value="assignments">
-                <HugeiconsIcon icon={AssignmentsIcon} size={14} />
-                Floor Assignments
-              </TabsTrigger>
-              <TabsTrigger value="sizes">
-                <HugeiconsIcon icon={RulerIcon} size={14} />
-                Opening Sizes
-              </TabsTrigger>
-              <TabsTrigger value="pieces">
-                <HugeiconsIcon icon={PuzzleIcon} size={14} />
-                Piece Pools
               </TabsTrigger>
             </TabsList>
             <TabsList>
@@ -178,39 +159,7 @@ export default function ProjectBuilder() {
                 projectId={id!}
                 buildings={buildings}
                 onCreateBuilding={createBuildingMutation.mutateAsync}
-                onUpdateBuilding={updateBuildingMutation.mutateAsync}
-                onDeleteBuilding={deleteBuildingMutation.mutateAsync}
               />
-            </TabsContent>
-            {activeBuilding && (
-              <>
-                <TabsContent value="assignments">
-                  <FloorAssignments
-                    projectId={id!}
-                    building={activeBuilding}
-                    buildings={buildings}
-                    activeBuildingId={activeBuilding?.id ?? null}
-                    onBuildingChange={setActiveBuildingId}
-                    aptTemplates={aptTemplates ?? []}
-                    existingAssignments={project.assignments.filter((a) => a.buildingId === activeBuilding.id)}
-                  />
-                </TabsContent>
-                <TabsContent value="sizes">
-                  <OpeningSizes
-                    projectId={id!}
-                    building={activeBuilding}
-                    buildings={buildings}
-                    activeBuildingId={activeBuilding?.id ?? null}
-                    onBuildingChange={setActiveBuildingId}
-                    existingAssignments={project.assignments.filter((a) => a.buildingId === activeBuilding.id)}
-                    existingSizes={project.openingSizes.filter((s) => s.buildingId === activeBuilding.id)}
-                    aptTemplateNames={aptTemplates?.reduce((acc, t) => { acc[t.id] = t.name; return acc; }, {} as Record<string, string>) ?? {}}
-                  />
-                </TabsContent>
-              </>
-            )}
-            <TabsContent value="pieces">
-              <PiecePools projectId={id!} />
             </TabsContent>
             <TabsContent value="settings">
               <ProjectSettings
@@ -219,10 +168,10 @@ export default function ProjectBuilder() {
                 status={status}
                 onNameChange={setName}
                 onClientChange={setClient}
-                onStatusChange={setStatus}
                 onSave={handleSaveSettings}
                 isSaving={updateMutation.isPending}
                 onDelete={handleDelete}
+                onArchive={handleArchive}
               />
             </TabsContent>
           </div>
@@ -235,24 +184,18 @@ export default function ProjectBuilder() {
 // ─── Settings Tab ─────────────────────────────────────────────────────────────
 
 function ProjectSettings({
-  name, client, status, onNameChange, onClientChange, onStatusChange, onSave, isSaving, onDelete,
+  name, client, status, onNameChange, onClientChange, onSave, isSaving, onDelete, onArchive,
 }: {
   name: string;
   client: string;
   status: Project["status"];
   onNameChange: (v: string) => void;
   onClientChange: (v: string) => void;
-  onStatusChange: (v: Project["status"]) => void;
   onSave: () => void;
   isSaving: boolean;
   onDelete: () => void;
+  onArchive: () => void;
 }) {
-  const statusOptions: { value: Project["status"]; label: string }[] = [
-    { value: "draft", label: "Draft" },
-    { value: "active", label: "Active" },
-    { value: "completed", label: "Completed" },
-    { value: "archived", label: "Archived" },
-  ];
   return (
     <div className="flex flex-col gap-4 max-w-2xl">
       <Card>
@@ -272,22 +215,28 @@ function ProjectSettings({
           </div>
           <Separator />
           <div className="grid grid-cols-[120px_1fr] items-center gap-3">
-            <Label htmlFor="p-status" className="text-xs text-muted-foreground">Status</Label>
-            <Select value={status} onValueChange={(v) => onStatusChange(v as Project["status"])}>
-              <SelectTrigger id="p-status" className="h-8 text-xs w-40">
-                <SelectValue>
-                  {(value: string) => statusOptions.find((o) => o.value === value)?.label ?? value}
-                </SelectValue>
-              </SelectTrigger>
-              <SelectContent>
-                {statusOptions.map((opt) => (
-                  <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <Label className="text-xs text-muted-foreground">Status</Label>
+            <div className="flex items-center gap-2">
+              <Badge
+                variant="secondary"
+                className={
+                  "text-[10px] " +
+                  (status === "active"
+                    ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400"
+                    : status === "completed"
+                      ? "bg-blue-500/15 text-blue-700 dark:text-blue-400"
+                      : status === "archived"
+                        ? "bg-zinc-500/15 text-zinc-600 dark:text-zinc-400"
+                        : "bg-amber-500/15 text-amber-700 dark:text-amber-400")
+                }
+              >
+                {status.charAt(0).toUpperCase() + status.slice(1)}
+              </Badge>
+              <span className="text-[10px] text-muted-foreground">Derived from building statuses</span>
+            </div>
           </div>
           <div className="flex justify-end">
-            <Button onClick={onSave} disabled={isSaving} className="gap-1.5">
+            <Button onClick={onSave} disabled={isSaving} className="gap-1.5 w-36 justify-center">
               <HugeiconsIcon icon={SaveIcon} size={14} />
               {isSaving ? "Saving..." : "Save Changes"}
             </Button>
@@ -300,15 +249,28 @@ function ProjectSettings({
           <CardDescription className="text-xs">Irreversible and destructive actions.</CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="flex items-center justify-between gap-3">
-            <div className="flex flex-col gap-0.5">
-              <span className="text-xs font-medium">Delete this project</span>
-              <span className="text-xs text-muted-foreground">All buildings, assignments, and piece pools will be lost.</span>
+          <div className="flex flex-col gap-3">
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex flex-col gap-0.5">
+                <span className="text-xs font-medium">Archive this project</span>
+                <span className="text-xs text-muted-foreground">Mark all buildings as archived and hide from active lists.</span>
+              </div>
+              <Button variant="outline" className="gap-1.5 shrink-0 w-36 justify-center" onClick={onArchive} disabled={status === "archived"}>
+                <HugeiconsIcon icon={ArchiveArrowDownIcon} size={14} />
+                Archive Project
+              </Button>
             </div>
-            <Button variant="outline" className="text-destructive hover:bg-destructive/10 hover:text-destructive gap-1.5 shrink-0" onClick={onDelete}>
-              <HugeiconsIcon icon={Delete02Icon} size={14} />
-              Delete Project
-            </Button>
+            <Separator />
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex flex-col gap-0.5">
+                <span className="text-xs font-medium">Delete this project</span>
+                <span className="text-xs text-muted-foreground">All buildings, assignments, and piece pools will be lost.</span>
+              </div>
+              <Button variant="outline" className="text-destructive hover:bg-destructive/10 hover:text-destructive gap-1.5 shrink-0 w-36 justify-center" onClick={onDelete}>
+                <HugeiconsIcon icon={Delete02Icon} size={14} />
+                Delete Project
+              </Button>
+            </div>
           </div>
         </CardContent>
       </Card>
@@ -316,33 +278,248 @@ function ProjectSettings({
   );
 }
 
+// ─── Building Detail View ─────────────────────────────────────────────────────
+
+export function BuildingDetail({
+  building, projectId, aptTemplates, existingAssignments, existingSizes, aptTemplateNames, onNext, onPrev, hasNext, hasPrev, onUpdateBuilding, onDeleteBuilding, canDelete,
+}: {
+  building: BuildingLike;
+  projectId: string;
+  aptTemplates: { id: string; name: string }[];
+  existingAssignments: { floor: number; apartmentIndex: number; apartmentTemplateId: string | null }[];
+  existingSizes: { apartmentTemplateOpeningId: string; floor: number; apartmentIndex: number; width: number; height: number }[];
+  aptTemplateNames: Record<string, string>;
+  onNext?: () => void;
+  onPrev?: () => void;
+  hasNext?: boolean;
+  hasPrev?: boolean;
+  onUpdateBuilding: (args: { projectId: string; buildingId: string; data: { name?: string; floors?: number; apartmentsPerFloor?: number; apartmentLabels?: string[]; status?: BuildingLike["status"] } }) => Promise<any>;
+  onDeleteBuilding: (args: { projectId: string; buildingId: string }) => Promise<any>;
+  canDelete: boolean;
+}) {
+  const [subTab, setSubTab] = useState("assignments");
+
+  return (
+    <div className="flex flex-col gap-3">
+      <Tabs value={subTab} onValueChange={setSubTab}>
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <TabsList>
+              <TabsTrigger value="assignments">
+                <HugeiconsIcon icon={AssignmentsIcon} size={14} />
+                Floor Assignments
+              </TabsTrigger>
+              <TabsTrigger value="sizes">
+                <HugeiconsIcon icon={RulerIcon} size={14} />
+                Opening Sizes
+              </TabsTrigger>
+              <TabsTrigger value="pieces">
+                <HugeiconsIcon icon={PuzzleIcon} size={14} />
+                Piece Pools
+              </TabsTrigger>
+            </TabsList>
+            <TabsList>
+              <TabsTrigger value="settings">
+                <HugeiconsIcon icon={Settings01Icon} size={14} />
+                Settings
+              </TabsTrigger>
+            </TabsList>
+          </div>
+          <span className="text-xs text-muted-foreground">
+            Created {new Date(building.createdAt).toLocaleDateString("en-GB")}
+          </span>
+        </div>
+        <TabsContent value="assignments" className="mt-3">
+          <FloorAssignments
+            projectId={projectId}
+            building={building}
+            aptTemplates={aptTemplates}
+            existingAssignments={existingAssignments}
+            onPrev={onPrev}
+            onNext={onNext}
+            hasPrev={hasPrev}
+            hasNext={hasNext}
+          />
+        </TabsContent>
+        <TabsContent value="sizes" className="mt-3">
+          <OpeningSizes
+            projectId={projectId}
+            building={building}
+            existingAssignments={existingAssignments}
+            existingSizes={existingSizes}
+            aptTemplateNames={aptTemplateNames}
+            onPrev={onPrev}
+            onNext={onNext}
+            hasPrev={hasPrev}
+            hasNext={hasNext}
+          />
+        </TabsContent>
+        <TabsContent value="pieces" className="mt-3">
+          <PiecePools projectId={projectId} />
+        </TabsContent>
+        <TabsContent value="settings" className="mt-3">
+          <BuildingSettings
+            building={building}
+            projectId={projectId}
+            onUpdateBuilding={onUpdateBuilding}
+            onDeleteBuilding={onDeleteBuilding}
+            canDelete={canDelete}
+          />
+        </TabsContent>
+      </Tabs>
+    </div>
+  );
+}
+
+// ─── Building Settings Tab ────────────────────────────────────────────────────
+
+const buildingStatusOptions = [
+  { value: "draft", label: "Draft" },
+  { value: "active", label: "Active" },
+  { value: "completed", label: "Completed" },
+  { value: "archived", label: "Archived" },
+];
+
+function BuildingSettings({
+  building, projectId, onUpdateBuilding, onDeleteBuilding, canDelete,
+}: {
+  building: BuildingLike;
+  projectId: string;
+  onUpdateBuilding: (args: { projectId: string; buildingId: string; data: { name?: string; floors?: number; apartmentsPerFloor?: number; apartmentLabels?: string[]; status?: BuildingLike["status"] } }) => Promise<any>;
+  onDeleteBuilding: (args: { projectId: string; buildingId: string }) => Promise<any>;
+  canDelete: boolean;
+}) {
+  const [name, setName] = useState(building.name);
+  const [floors, setFloors] = useState(building.floors);
+  const [apts, setApts] = useState(building.apartmentsPerFloor);
+  const [status, setStatus] = useState<BuildingLike["status"]>(building.status);
+  let initLabels: string[] = [];
+  try { initLabels = JSON.parse(building.apartmentLabels); } catch { initLabels = []; }
+  const [labels, setLabels] = useState<string[]>(initLabels);
+  const [saving, setSaving] = useState(false);
+
+  const updateLabel = (i: number, v: string) => {
+    const arr = [...labels];
+    arr[i] = v;
+    setLabels(arr);
+  };
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      await onUpdateBuilding({ projectId, buildingId: building.id, data: { name, floors, apartmentsPerFloor: apts, apartmentLabels: labels, status } });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="flex flex-col gap-4 max-w-2xl">
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-sm">General</CardTitle>
+          <CardDescription className="text-xs">Building configuration and apartment layout.</CardDescription>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-4">
+          <div className="grid grid-cols-[120px_1fr] items-center gap-3">
+            <Label htmlFor="b-name" className="text-xs text-muted-foreground">Name</Label>
+            <Input id="b-name" value={name} onChange={(e) => setName(e.target.value)} className="h-8 text-xs" />
+          </div>
+          <Separator />
+          <div className="grid grid-cols-[120px_1fr_1fr] items-center gap-3">
+            <Label className="text-xs text-muted-foreground">Layout</Label>
+            <div className="flex items-center gap-2">
+              <Input type="number" min={1} value={floors} onChange={(e) => setFloors(parseInt(e.target.value) || 1)} className="h-8 text-xs w-24" />
+              <span className="text-xs text-muted-foreground">floors</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <Input type="number" min={1} value={apts} onChange={(e) => setApts(parseInt(e.target.value) || 1)} className="h-8 text-xs w-24" />
+              <span className="text-xs text-muted-foreground">apts/floor</span>
+            </div>
+          </div>
+          <Separator />
+          <div className="grid grid-cols-[120px_1fr] items-start gap-3">
+            <Label className="text-xs text-muted-foreground pt-1.5">Apt Labels</Label>
+            <div className="flex flex-wrap gap-1.5">
+              {Array.from({ length: apts }, (_, i) => (
+                <Input key={i} value={labels[i] ?? String.fromCharCode(65 + i)} onChange={(e) => updateLabel(i, e.target.value)} className="w-14 h-8 text-center text-xs" />
+              ))}
+            </div>
+          </div>
+          <Separator />
+          <div className="grid grid-cols-[120px_1fr] items-center gap-3">
+            <Label htmlFor="b-status" className="text-xs text-muted-foreground">Status</Label>
+            <Select value={status} onValueChange={(v) => setStatus(v as BuildingLike["status"])}>
+              <SelectTrigger id="b-status" className="h-8 text-xs w-40">
+                <SelectValue placeholder="Status">
+                  {status.charAt(0).toUpperCase() + status.slice(1)}
+                </SelectValue>
+              </SelectTrigger>
+              <SelectContent>
+                {buildingStatusOptions.map((opt) => (
+                  <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="flex justify-end">
+            <Button onClick={handleSave} disabled={saving || !name.trim()} className="gap-1.5 w-36 justify-center">
+              <HugeiconsIcon icon={SaveIcon} size={14} />
+              {saving ? "Saving..." : "Save Changes"}
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+      {canDelete && (
+        <Card className="border-destructive/20">
+          <CardHeader>
+            <CardTitle className="text-sm text-destructive">Danger Zone</CardTitle>
+            <CardDescription className="text-xs">Irreversible and destructive actions.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex flex-col gap-0.5">
+                <span className="text-xs font-medium">Delete this building</span>
+                <span className="text-xs text-muted-foreground">All floor assignments, opening sizes, and piece pools for this building will be lost.</span>
+              </div>
+              <Button variant="outline" className="text-destructive hover:bg-destructive/10 hover:text-destructive gap-1.5 shrink-0 w-36 justify-center" onClick={() => onDeleteBuilding({ projectId, buildingId: building.id })}>
+                <HugeiconsIcon icon={Delete02Icon} size={14} />
+                Delete Building
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+    </div>
+  );
+}
+
 // ─── Buildings Manager Tab ────────────────────────────────────────────────────
 
-interface BuildingLike {
+export interface BuildingLike {
   id: string;
   name: string;
   floors: number;
   apartmentsPerFloor: number;
   apartmentLabels: string;
   sortOrder: number;
+  status: "draft" | "active" | "completed" | "archived";
   createdAt: number;
 }
 
 function BuildingsManager({
-  projectId, buildings, onCreateBuilding, onUpdateBuilding, onDeleteBuilding,
+  projectId, buildings, onCreateBuilding,
 }: {
   projectId: string;
   buildings: BuildingLike[];
   onCreateBuilding: (args: { projectId: string; data: { name: string; floors?: number; apartmentsPerFloor?: number; apartmentLabels?: string[] } }) => Promise<any>;
-  onUpdateBuilding: (args: { projectId: string; buildingId: string; data: { name?: string; floors?: number; apartmentsPerFloor?: number; apartmentLabels?: string[] } }) => Promise<any>;
-  onDeleteBuilding: (args: { projectId: string; buildingId: string }) => Promise<any>;
 }) {
+  const navigate = useNavigate();
   const [showCreate, setShowCreate] = useState(false);
   const [newName, setNewName] = useState("");
   const [newFloors, setNewFloors] = useState(6);
   const [newApts, setNewApts] = useState(4);
   const [newLabels, setNewLabels] = useState<string[]>(["A", "B", "C", "D"]);
-  const [editingId, setEditingId] = useState<string | null>(null);
 
   const updateNewLabel = (i: number, v: string) => {
     const arr = [...newLabels];
@@ -392,31 +569,21 @@ function BuildingsManager({
             let labels: string[] = [];
             try { labels = JSON.parse(b.apartmentLabels); } catch { labels = []; }
             return (
-              <Card key={b.id} size="sm" className="pb-0">
+              <Card key={b.id} size="sm" className={`pb-0 cursor-pointer hover:border-primary/40 transition-colors${b.status === "archived" ? " opacity-50" : ""}`} onClick={() => navigate(`/projects/${projectId}/buildings/${b.id}`)}>
                 <CardHeader className="pb-1">
                   <CardAction>
-                    <DropdownMenu>
-                      <DropdownMenuTrigger render={
-                        <Button variant="ghost" size="icon" className="size-6" />
-                      }>
-                        <HugeiconsIcon icon={MoreHorizontalCircle01Icon} size={14} />
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        <DropdownMenuItem onClick={() => setEditingId(b.id)}>
-                          <HugeiconsIcon icon={Edit02Icon} size={14} />
-                          Edit
-                        </DropdownMenuItem>
-                        {buildings.length > 1 && (
-                          <DropdownMenuItem
-                            variant="destructive"
-                            onClick={async () => { await onDeleteBuilding({ projectId, buildingId: b.id }); }}
-                          >
-                            <HugeiconsIcon icon={Delete02Icon} size={14} />
-                            Delete
-                          </DropdownMenuItem>
-                        )}
-                      </DropdownMenuContent>
-                    </DropdownMenu>
+                    <Badge variant="secondary" className={
+                      "text-[10px] " +
+                      (b.status === "active"
+                        ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400"
+                        : b.status === "completed"
+                          ? "bg-blue-500/15 text-blue-700 dark:text-blue-400"
+                          : b.status === "archived"
+                            ? "bg-zinc-500/15 text-zinc-600 dark:text-zinc-400"
+                            : "bg-amber-500/15 text-amber-700 dark:text-amber-400")
+                    }>
+                      {b.status.charAt(0).toUpperCase() + b.status.slice(1)}
+                    </Badge>
                   </CardAction>
                   <CardTitle className="text-sm truncate">{b.name}</CardTitle>
                   <CardDescription className="text-xs truncate">
@@ -427,7 +594,7 @@ function BuildingsManager({
                   <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
                     <span>Apts: {labels.join(", ")}</span>
                     <Separator orientation="vertical" className="my-0.5" />
-                    <span>{new Date(b.createdAt).toLocaleDateString("en-GB")}</span>
+                    <span>Created {new Date(b.createdAt).toLocaleDateString("en-GB")}</span>
                   </div>
                 </CardFooter>
               </Card>
@@ -483,115 +650,23 @@ function BuildingsManager({
           </DialogContent>
         </Dialog>
       )}
-
-      {editingId && (
-        <BuildingEditDialog
-          building={buildings.find((b) => b.id === editingId)!}
-          onSave={async (data) => { await onUpdateBuilding({ projectId, buildingId: editingId, data }); setEditingId(null); }}
-          onCancel={() => setEditingId(null)}
-        />
-      )}
     </div>
-  );
-}
-
-function BuildingEditDialog({ building, onSave, onCancel }: {
-  building: BuildingLike;
-  onSave: (data: { name: string; floors: number; apartmentsPerFloor: number; apartmentLabels: string[] }) => void;
-  onCancel: () => void;
-}) {
-  const [name, setName] = useState(building.name);
-  const [floors, setFloors] = useState(building.floors);
-  const [apts, setApts] = useState(building.apartmentsPerFloor);
-  let initLabels: string[] = [];
-  try { initLabels = JSON.parse(building.apartmentLabels); } catch { initLabels = []; }
-  const [labels, setLabels] = useState<string[]>(initLabels);
-
-  const updateLabel = (i: number, v: string) => {
-    const arr = [...labels];
-    arr[i] = v;
-    setLabels(arr);
-  };
-
-  return (
-    <Dialog open={true} onOpenChange={(open) => { if (!open) onCancel(); }}>
-      <DialogContent className="max-w-md">
-        <DialogHeader>
-          <DialogTitle>Edit Building</DialogTitle>
-        </DialogHeader>
-        <div className="flex flex-col gap-3">
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="eb-name">Name</Label>
-            <Input id="eb-name" value={name} onChange={(e) => setName(e.target.value)} />
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor="eb-floors">Floors</Label>
-              <Input id="eb-floors" type="number" min={1} value={floors}
-                onChange={(e) => setFloors(parseInt(e.target.value) || 1)} />
-            </div>
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor="eb-apts">Apartments per Floor</Label>
-              <Input id="eb-apts" type="number" min={1} value={apts}
-                onChange={(e) => setApts(parseInt(e.target.value) || 1)} />
-            </div>
-          </div>
-          <div className="flex flex-col gap-1.5">
-            <Label>Apartment Labels</Label>
-            <div className="flex flex-wrap gap-1.5">
-              {Array.from({ length: apts }, (_, i) => (
-                <Input key={i} value={labels[i] ?? String.fromCharCode(65 + i)} onChange={(e) => updateLabel(i, e.target.value)} className="w-14 h-8 text-center text-xs" />
-              ))}
-            </div>
-          </div>
-        </div>
-        <DialogFooter>
-          <Button variant="ghost" onClick={onCancel}>Cancel</Button>
-          <Button onClick={() => onSave({ name, floors, apartmentsPerFloor: apts, apartmentLabels: labels })} disabled={!name.trim()}>Save</Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
-// ─── Building Selector ──────────────────────────────────────────────────────────
-
-function BuildingSelector({ buildings, activeBuildingId, onBuildingChange }: {
-  buildings: BuildingLike[];
-  activeBuildingId: string | null;
-  onBuildingChange: (id: string) => void;
-}) {
-  const activeBuilding = buildings.find((b) => b.id === activeBuildingId);
-  if (buildings.length <= 1) return null;
-  return (
-    <Select value={activeBuildingId ?? ""} onValueChange={(v: string | null) => v && onBuildingChange(v)}>
-      <SelectTrigger className="w-48 h-7 text-xs">
-        <SelectValue placeholder="Select building...">
-          {activeBuilding ? activeBuilding.name : "Select building..."}
-        </SelectValue>
-      </SelectTrigger>
-      <SelectContent>
-        {buildings.map((b) => (
-          <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>
-        ))}
-      </SelectContent>
-    </Select>
   );
 }
 
 // ─── Floor Assignments Tab ─────────────────────────────────────────────────────────
 
 function FloorAssignments({
-  projectId, building, buildings, activeBuildingId, onBuildingChange,
-  aptTemplates, existingAssignments,
+  projectId, building, aptTemplates, existingAssignments, onPrev, onNext, hasPrev, hasNext,
 }: {
   projectId: string;
   building: BuildingLike;
-  buildings: BuildingLike[];
-  activeBuildingId: string | null;
-  onBuildingChange: (id: string) => void;
   aptTemplates: { id: string; name: string }[];
   existingAssignments: { floor: number; apartmentIndex: number; apartmentTemplateId: string | null }[];
+  onPrev?: () => void;
+  onNext?: () => void;
+  hasPrev?: boolean;
+  hasNext?: boolean;
 }) {
   const saveMutation = useSaveAssignments();
   const floors = building.floors;
@@ -619,16 +694,6 @@ function FloorAssignments({
     setGrid((g) => ({ ...g, [`${floor}_${aptIndex}`]: value }));
   };
 
-  const handleFillFloor = (floor: number, templateId: string | null) => {
-    setGrid((g) => {
-      const newG = { ...g };
-      for (let i = 0; i < apartmentsPerFloor; i++) {
-        newG[`${floor}_${i}`] = templateId;
-      }
-      return newG;
-    });
-  };
-
   const handleFillAll = (templateId: string | null) => {
     setGrid((g) => {
       const newG = { ...g };
@@ -640,6 +705,24 @@ function FloorAssignments({
       return newG;
     });
   };
+
+  const handleReset = () => {
+    const g: AssignmentGrid = {};
+    for (const a of existingAssignments) {
+      g[`${a.floor}_${a.apartmentIndex}`] = a.apartmentTemplateId;
+    }
+    setGrid(g);
+  };
+
+  const fillAllValue = useMemo(() => {
+    const values = new Set<string>();
+    for (let f = 0; f < floors; f++) {
+      for (let i = 0; i < apartmentsPerFloor; i++) {
+        values.add(grid[`${f}_${i}`] ?? "");
+      }
+    }
+    return values.size === 1 ? [...values][0] : "";
+  }, [grid, floors, apartmentsPerFloor]);
 
   const handleSave = async () => {
     const assignments: { floor: number; apartmentIndex: number; apartmentTemplateId: string | null }[] = [];
@@ -654,15 +737,23 @@ function FloorAssignments({
 
   return (
     <div className="flex flex-col gap-3">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <BuildingSelector buildings={buildings} activeBuildingId={activeBuildingId} onBuildingChange={onBuildingChange} />
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1">
+            <Button variant="outline" size="icon" onClick={onPrev} disabled={!hasPrev}>
+              <HugeiconsIcon icon={ArrowLeft01Icon} />
+            </Button>
+            <Button variant="outline" size="icon" onClick={onNext} disabled={!hasNext}>
+              <HugeiconsIcon icon={ArrowRight01Icon} />
+            </Button>
+          </div>
+          <span className="text-sm font-medium">{building.name}</span>
           <span className="text-xs text-muted-foreground">
-            {building.name}: {floors} floors × {apartmentsPerFloor} apts
+            {building.floors} floors × {building.apartmentsPerFloor} apts · {building.floors * building.apartmentsPerFloor} total
           </span>
         </div>
         <div className="flex items-center gap-2">
-          <Select onValueChange={(v: string | null) => v && handleFillAll(v)}>
+          <Select value={fillAllValue} onValueChange={(v: string | null) => v && handleFillAll(v)}>
             <SelectTrigger className="w-40 h-7 text-xs">
               <span className="text-muted-foreground">Fill all...</span>
             </SelectTrigger>
@@ -672,37 +763,35 @@ function FloorAssignments({
               ))}
             </SelectContent>
           </Select>
-          <Button  className="gap-1.5" onClick={handleSave} disabled={saveMutation.isPending}>
-            <HugeiconsIcon icon={SaveIcon} size={14} />
-            {saveMutation.isPending ? "Saving..." : "Save"}
+          <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => handleFillAll(null)}>
+            Clear
           </Button>
         </div>
       </div>
 
-      <div className="rounded-md border overflow-x-auto">
+      <div className="overflow-x-auto">
         <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead className="h-8 text-xs w-20">Floor</TableHead>
+          <TableHeader className="sticky top-0 z-10 bg-muted/50 backdrop-blur-sm">
+            <TableRow className="border-b hover:bg-transparent">
+              <TableHead className="h-9 text-xs w-24 font-semibold">{building.name}</TableHead>
               {Array.from({ length: apartmentsPerFloor }, (_, i) => (
-                <TableHead key={i} className="h-8 text-xs text-center">
-                  Apt {apartmentLabels[i] ?? String.fromCharCode(65 + i)}
+                <TableHead key={i} className="h-9 text-xs text-center font-semibold">
+                  Apartment {apartmentLabels[i] ?? String.fromCharCode(65 + i)}
                 </TableHead>
               ))}
-              <TableHead className="h-8 text-xs w-24">Fill Floor</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {Array.from({ length: floors }, (_, f) => (
-              <TableRow key={f}>
-                <TableCell className="text-xs font-medium py-1.5">F{f + 1}</TableCell>
+              <TableRow key={f} className="group">
+                <TableCell className="text-xs font-medium py-1.5 text-muted-foreground group-hover:text-foreground">Floor {f + 1}</TableCell>
                 {Array.from({ length: apartmentsPerFloor }, (_, i) => (
-                  <TableCell key={i} className="py-1.5">
+                  <TableCell key={i} className="py-3 px-4 text-center">
                     <Select
                       value={grid[`${f}_${i}`] ?? ""}
                       onValueChange={(v: string | null) => handleCellChange(f, i, v || null)}
                     >
-                      <SelectTrigger className="h-7 text-xs">
+                      <SelectTrigger className="h-7 text-xs justify-center w-full">
                         <SelectValue placeholder="—">
                           {grid[`${f}_${i}`] ? templateNameMap[grid[`${f}_${i}`]!] ?? grid[`${f}_${i}`] : "—"}
                         </SelectValue>
@@ -715,22 +804,22 @@ function FloorAssignments({
                     </Select>
                   </TableCell>
                 ))}
-                <TableCell className="py-1.5">
-                  <Select onValueChange={(v: string | null) => v && handleFillFloor(f, v)}>
-                    <SelectTrigger className="h-7 text-xs">
-                      <span className="text-muted-foreground">—</span>
-                    </SelectTrigger>
-                    <SelectContent>
-                      {aptTemplates.map((t) => (
-                        <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </TableCell>
               </TableRow>
             ))}
           </TableBody>
         </Table>
+      </div>
+      <div className="sticky bottom-0 flex flex-col gap-2 py-2 bg-background/80 backdrop-blur-sm">
+        <Separator />
+        <div className="flex items-center justify-end gap-2">
+            <Button variant="outline" onClick={handleReset} className="h-7">
+              Reset
+            </Button>
+            <Button className="gap-1.5 h-7" onClick={handleSave} disabled={saveMutation.isPending}>
+              <HugeiconsIcon icon={SaveIcon} size={14} />
+              {saveMutation.isPending ? "Saving..." : "Save"}
+            </Button>
+          </div>
       </div>
     </div>
   );
@@ -739,17 +828,17 @@ function FloorAssignments({
 // ─── Opening Sizes Tab ────────────────────────────────────────────────────────
 
 function OpeningSizes({
-  projectId, building, buildings, activeBuildingId, onBuildingChange,
-  existingAssignments, existingSizes, aptTemplateNames,
+  projectId, building, existingAssignments, existingSizes, aptTemplateNames, onPrev, onNext, hasPrev, hasNext,
 }: {
   projectId: string;
   building: BuildingLike;
-  buildings: BuildingLike[];
-  activeBuildingId: string | null;
-  onBuildingChange: (id: string) => void;
   existingAssignments: { floor: number; apartmentIndex: number; apartmentTemplateId: string | null }[];
   existingSizes: { apartmentTemplateOpeningId: string; floor: number; apartmentIndex: number; width: number; height: number }[];
   aptTemplateNames: Record<string, string>;
+  onPrev?: () => void;
+  onNext?: () => void;
+  hasPrev?: boolean;
+  hasNext?: boolean;
 }) {
   const saveMutation = useSaveOpeningSizes();
   const floors = building.floors;
@@ -854,6 +943,29 @@ function OpeningSizes({
     });
   };
 
+  const handleClearAll = (openingId: string) => {
+    setSizes((s) => {
+      const newS = { ...s };
+      for (const key of Object.keys(newS)) {
+        if (key.startsWith(`${openingId}_`)) {
+          delete newS[key];
+        }
+      }
+      return newS;
+    });
+  };
+
+  const handleReset = () => {
+    const g: SizeGrid = {};
+    for (const s of existingSizes) {
+      g[`${s.apartmentTemplateOpeningId}_${s.floor}_${s.apartmentIndex}`] = {
+        width: String(s.width),
+        height: String(s.height),
+      };
+    }
+    setSizes(g);
+  };
+
   const handleSave = async () => {
     const sizesArr: { apartmentTemplateOpeningId: string; floor: number; apartmentIndex: number; width: number; height: number }[] = [];
     for (const [key, val] of Object.entries(sizes)) {
@@ -877,7 +989,7 @@ function OpeningSizes({
   if (usedTemplateIds.length === 0) {
     return (
       <div className="text-center text-sm text-muted-foreground py-8">
-        No apartment types assigned yet. Go to Floor Assignments tab first.
+        No apartment types assigned yet. Go to Floor Assignments first.
       </div>
     );
   }
@@ -894,35 +1006,19 @@ function OpeningSizes({
 
   return (
     <div className="flex flex-col gap-3">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <BuildingSelector buildings={buildings} activeBuildingId={activeBuildingId} onBuildingChange={onBuildingChange} />
-          <p className="text-xs text-muted-foreground">
-            {building.name}: Enter W×H per opening
-          </p>
+      <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1">
+          <Button variant="outline" size="icon" onClick={onPrev} disabled={!hasPrev}>
+            <HugeiconsIcon icon={ArrowLeft01Icon} />
+          </Button>
+          <Button variant="outline" size="icon" onClick={onNext} disabled={!hasNext}>
+            <HugeiconsIcon icon={ArrowRight01Icon} />
+          </Button>
         </div>
-        <Button  className="gap-1.5" onClick={handleSave} disabled={saveMutation.isPending}>
-          <HugeiconsIcon icon={SaveIcon} size={14} />
-          {saveMutation.isPending ? "Saving..." : "Save Sizes"}
-        </Button>
-      </div>
-
-      {/* Opening selector */}
-      <div className="flex flex-wrap gap-1.5">
-        {allOpenings.map((o) => (
-          <button
-            key={o.id}
-            type="button"
-            className={`px-2.5 py-1 text-xs font-medium rounded-md transition-colors ${
-              activeOpeningId === o.id
-                ? "bg-accent text-accent-foreground"
-                : "text-muted-foreground hover:text-foreground hover:bg-accent/50 border"
-            }`}
-            onClick={() => setActiveOpeningId(o.id)}
-          >
-            {o.label}
-          </button>
-        ))}
+        <span className="text-sm font-medium">{building.name}</span>
+        <span className="text-xs text-muted-foreground">
+          {building.floors} floors × {building.apartmentsPerFloor} apts · {building.floors * building.apartmentsPerFloor} total
+        </span>
       </div>
 
       {activeOpening && (
@@ -937,15 +1033,46 @@ function OpeningSizes({
           sizes={sizes}
           onCellChange={handleCellChange}
           onFillAll={handleFillAll}
+          onClearAll={handleClearAll}
+          openingChips={
+            <div className="flex flex-wrap gap-1.5">
+              {allOpenings.map((o) => (
+                <button
+                  key={o.id}
+                  type="button"
+                  className={`px-2.5 py-1 text-xs font-medium rounded-md transition-colors ${
+                    activeOpeningId === o.id
+                      ? "bg-accent text-accent-foreground"
+                      : "text-muted-foreground hover:text-foreground hover:bg-accent/50 border"
+                  }`}
+                  onClick={() => setActiveOpeningId(o.id)}
+                >
+                  {o.label}
+                </button>
+              ))}
+            </div>
+          }
         />
       )}
+      <div className="sticky bottom-0 flex flex-col gap-2 py-2 bg-background/80 backdrop-blur-sm">
+        <Separator />
+        <div className="flex items-center justify-end gap-2">
+            <Button variant="outline" onClick={handleReset}>
+              Reset
+            </Button>
+            <Button className="gap-1.5" onClick={handleSave} disabled={saveMutation.isPending}>
+              <HugeiconsIcon icon={SaveIcon} size={14} />
+              {saveMutation.isPending ? "Saving..." : "Save Sizes"}
+            </Button>
+          </div>
+      </div>
     </div>
   );
 }
 
 function OpeningSizeGrid({
   openingId, openingLabel, floors, apartmentsPerFloor, apartmentLabels,
-  assignmentMap, templateOpeningsMap, sizes, onCellChange, onFillAll,
+  assignmentMap, templateOpeningsMap, sizes, onCellChange, onFillAll, onClearAll, openingChips,
 }: {
   openingId: string;
   openingLabel: string;
@@ -957,6 +1084,8 @@ function OpeningSizeGrid({
   sizes: SizeGrid;
   onCellChange: (openingId: string, floor: number, aptIndex: number, field: "width" | "height", value: string) => void;
   onFillAll: (openingId: string, width: string, height: string) => void;
+  onClearAll: (openingId: string) => void;
+  openingChips: ReactNode;
 }) {
   const [bulkW, setBulkW] = useState("");
   const [bulkH, setBulkH] = useState("");
@@ -971,9 +1100,9 @@ function OpeningSizeGrid({
 
   return (
     <div className="flex flex-col gap-2">
-      <div className="flex items-center gap-2">
-        <span className="text-xs font-medium">{openingLabel}</span>
-        <div className="flex items-center gap-1 ml-auto">
+      <div className="flex items-center justify-between gap-2 flex-wrap">
+        {openingChips}
+        <div className="flex items-center gap-1">
           <Input
             type="number"
             placeholder="W"
@@ -992,45 +1121,52 @@ function OpeningSizeGrid({
           <Button
             variant="outline"
             
-            className="h-7 text-xs gap-1"
+            className="h-7 text-xs gap-1.5"
             onClick={() => bulkW && bulkH && onFillAll(openingId, bulkW, bulkH)}
           >
-            <HugeiconsIcon icon={ArrowDown01Icon} size={12} />
+            <HugeiconsIcon icon={PencilRulerIcon} size={12} />
             Fill All
+          </Button>
+          <Button
+            variant="outline"
+            className="h-7 text-xs"
+            onClick={() => onClearAll(openingId)}
+          >
+            Clear
           </Button>
         </div>
       </div>
 
-      <div className="rounded-md border overflow-x-auto">
+      <div className="overflow-x-auto">
         <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead className="h-8 text-xs w-16">Floor</TableHead>
+          <TableHeader className="sticky top-0 z-10 bg-muted/50 backdrop-blur-sm">
+            <TableRow className="border-b hover:bg-transparent">
+              <TableHead className="h-9 text-xs w-24 font-semibold">{openingLabel}</TableHead>
               {Array.from({ length: apartmentsPerFloor }, (_, i) => (
-                <TableHead key={i} className="h-8 text-xs">
-                  Apt {apartmentLabels[i] ?? String.fromCharCode(65 + i)}
+                <TableHead key={i} className="h-9 text-xs text-center font-semibold">
+                  Apartment {apartmentLabels[i] ?? String.fromCharCode(65 + i)}
                 </TableHead>
               ))}
             </TableRow>
           </TableHeader>
           <TableBody>
             {Array.from({ length: floors }, (_, f) => (
-              <TableRow key={f}>
-                <TableCell className="text-xs font-medium py-1.5">F{f + 1}</TableCell>
+              <TableRow key={f} className="group">
+                <TableCell className="text-xs font-medium py-1.5 text-muted-foreground group-hover:text-foreground">Floor {f + 1}</TableCell>
                 {Array.from({ length: apartmentsPerFloor }, (_, i) => {
                   const hasOpening = cellHasOpening(f, i);
                   const key = `${openingId}_${f}_${i}`;
                   const cellSize = sizes[key] ?? { width: "", height: "" };
                   return (
-                    <TableCell key={i} className="py-1.5">
+                    <TableCell key={i} className="py-3 px-4 text-center">
                       {hasOpening ? (
-                        <div className="flex items-center gap-1">
+                        <div className="flex items-center justify-center gap-1">
                           <Input
                             type="number"
                             placeholder="W"
                             value={cellSize.width}
                             onChange={(e) => onCellChange(openingId, f, i, "width", e.target.value)}
-                            className="w-16 h-6 text-xs"
+                            className="w-24 h-6 text-xs"
                           />
                           <span className="text-xs text-muted-foreground">×</span>
                           <Input
@@ -1038,7 +1174,7 @@ function OpeningSizeGrid({
                             placeholder="H"
                             value={cellSize.height}
                             onChange={(e) => onCellChange(openingId, f, i, "height", e.target.value)}
-                            className="w-16 h-6 text-xs"
+                            className="w-24 h-6 text-xs"
                           />
                         </div>
                       ) : (

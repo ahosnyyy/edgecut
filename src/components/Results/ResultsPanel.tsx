@@ -4,7 +4,7 @@ import { useApp, ACTIONS } from '../../context/AppContext';
 import { formatLength } from '../../engine/units';
 import { validateMove } from '../../engine/optimizer';
 import {
-  CircleGaugeIcon, MaterialAndTextureIcon, PackageIcon, WasteIcon, DollarSignIcon,
+  CircleGaugeIcon, ScissorIcon, PackageIcon, WasteIcon, DollarSignIcon,
   PrinterIcon, FileDownloadIcon, DragDropVerticalIcon, Recycle01Icon, Add01Icon, Delete02Icon, ListSettingIcon
 } from '@hugeicons/core-free-icons';
 import { HugeiconsIcon } from '@hugeicons/react';
@@ -58,7 +58,7 @@ export default function ResultsPanel() {
     return (
       <Card className="w-full border-dashed">
         <CardContent className="flex flex-col items-center justify-center py-16 text-center">
-          <HugeiconsIcon icon={MaterialAndTextureIcon} size={24} className="text-muted-foreground mb-3" />
+          <HugeiconsIcon icon={ScissorIcon} size={24} className="text-muted-foreground mb-3" />
           <CardTitle className="mb-1.5">No cutting plan yet</CardTitle>
           <CardDescription className="max-w-sm">
             Add your stock lengths and demand pieces, then click <strong>Optimize Cuts</strong> to generate an optimal cutting plan.
@@ -409,7 +409,7 @@ export default function ResultsPanel() {
         <Card id="cutting-plan-printable">
           <CardHeader className="flex flex-row items-center justify-between space-y-0">
             <CardTitle className="flex items-center gap-1.5">
-              <HugeiconsIcon icon={MaterialAndTextureIcon} size={14} /> Cutting Plan
+              <HugeiconsIcon icon={ScissorIcon} size={14} /> Cutting Plan
             </CardTitle>
             <div className="flex items-center gap-1 no-print">
               <Button variant="ghost" size="sm" className="text-destructive hover:bg-destructive/10 hover:text-destructive" onClick={handleClear} title="Clear Plan">

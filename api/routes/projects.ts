@@ -19,6 +19,16 @@ function generateId(): string {
   return crypto.randomUUID();
 }
 
+type BuildingStatus = "draft" | "active" | "completed" | "archived";
+
+function deriveProjectStatus(statuses: BuildingStatus[]): BuildingStatus {
+  if (statuses.length === 0) return "draft";
+  if (statuses.every((s) => s === "archived")) return "archived";
+  if (statuses.every((s) => s === "completed" || s === "archived") && statuses.some((s) => s === "completed")) return "completed";
+  if (statuses.some((s) => s === "active" || s === "completed")) return "active";
+  return "draft";
+}
+
 // ─── GET /api/projects — List all ─────────────────────────────────────────────
 
 projectRoutes.get("/", async (c) => {
@@ -35,7 +45,8 @@ projectRoutes.get("/", async (c) => {
       apartmentLabels: projects.apartmentLabels,
       createdAt: projects.createdAt,
       updatedAt: projects.updatedAt,
-      buildingCount: sql<number>`(SELECT COUNT(*) FROM ${buildings} WHERE ${buildings.projectId} = ${projects.id})`,
+      buildingCount: sql<number>`(SELECT COUNT(*) FROM buildings WHERE project_id = "projects"."id")`,
+      completedBuildings: sql<number>`(SELECT COUNT(*) FROM buildings WHERE project_id = "projects"."id" AND status = 'completed')`,
     })
     .from(projects)
     .orderBy(projects.name);
@@ -150,16 +161,25 @@ projectRoutes.put("/:id", async (c) => {
   }>();
 
   const now = Date.now();
+  const newStatus = (body.status as "draft" | "active" | "completed" | "archived") ?? existing[0].status;
   await db
     .update(projects)
     .set({
       name: body.name ?? existing[0].name,
       client: body.client ?? existing[0].client,
       notes: body.notes ?? existing[0].notes,
-      status: (body.status as "draft" | "active" | "completed" | "archived") ?? existing[0].status,
+      status: newStatus,
       updatedAt: now,
     })
     .where(eq(projects.id, id));
+
+  // When archiving project, archive all buildings too
+  if (newStatus === "archived") {
+    await db
+      .update(buildings)
+      .set({ status: "archived" })
+      .where(eq(buildings.projectId, id));
+  }
 
   return c.json({ id, updated: true });
 });
@@ -184,6 +204,7 @@ projectRoutes.post("/:id/buildings", async (c) => {
     floors?: number;
     apartmentsPerFloor?: number;
     apartmentLabels?: string[];
+    status?: string;
   }>();
 
   if (!body.name?.trim()) {
@@ -205,6 +226,7 @@ projectRoutes.post("/:id/buildings", async (c) => {
     apartmentsPerFloor: body.apartmentsPerFloor ?? 4,
     apartmentLabels: JSON.stringify(body.apartmentLabels ?? ["A", "B", "C", "D"]),
     sortOrder,
+    status: "draft",
     createdAt: Date.now(),
   });
 
@@ -215,6 +237,7 @@ projectRoutes.post("/:id/buildings", async (c) => {
 
 projectRoutes.put("/:id/buildings/:buildingId", async (c) => {
   const db = getDb(c.env);
+  const id = c.req.param("id");
   const buildingId = c.req.param("buildingId");
 
   const existing = await db
@@ -231,6 +254,7 @@ projectRoutes.put("/:id/buildings/:buildingId", async (c) => {
     floors?: number;
     apartmentsPerFloor?: number;
     apartmentLabels?: string[];
+    status?: string;
   }>();
 
   await db
@@ -242,20 +266,46 @@ projectRoutes.put("/:id/buildings/:buildingId", async (c) => {
       apartmentLabels: body.apartmentLabels
         ? JSON.stringify(body.apartmentLabels)
         : existing[0].apartmentLabels,
+      status: (body.status as "draft" | "active" | "completed" | "archived") ?? existing[0].status,
     })
     .where(eq(buildings.id, buildingId));
 
-  return c.json({ id: buildingId, updated: true });
+  // Derive project status from building statuses
+  const allBuildings = await db
+    .select({ status: buildings.status })
+    .from(buildings)
+    .where(eq(buildings.projectId, id));
+
+  const derivedStatus = deriveProjectStatus(allBuildings.map((b) => b.status));
+  await db
+    .update(projects)
+    .set({ status: derivedStatus, updatedAt: Date.now() })
+    .where(eq(projects.id, id));
+
+  return c.json({ id: buildingId, updated: true, projectStatus: derivedStatus });
 });
 
 // ─── DELETE /api/projects/:id/buildings/:buildingId ───────────────────────────
 
 projectRoutes.delete("/:id/buildings/:buildingId", async (c) => {
   const db = getDb(c.env);
+  const id = c.req.param("id");
   const buildingId = c.req.param("buildingId");
 
   await db.delete(buildings).where(eq(buildings.id, buildingId));
-  return c.json({ deleted: true });
+
+  // Re-derive project status
+  const remaining = await db
+    .select({ status: buildings.status })
+    .from(buildings)
+    .where(eq(buildings.projectId, id));
+  const derivedStatus = deriveProjectStatus(remaining.map((b) => b.status));
+  await db
+    .update(projects)
+    .set({ status: derivedStatus, updatedAt: Date.now() })
+    .where(eq(projects.id, id));
+
+  return c.json({ deleted: true, projectStatus: derivedStatus });
 });
 
 // ─── PUT /api/projects/:id/buildings/:buildingId/assignments ──────────────────

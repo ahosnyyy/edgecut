@@ -11,24 +11,21 @@
 	<!ENTITY ns_adobe_xpath "http://ns.adobe.com/XPath/1.0/">
 ]>
 <svg version="1.1" id="Layer_1" xmlns:x="&ns_extend;" xmlns:i="&ns_ai;" xmlns:graph="&ns_graphs;"
-	 xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" x="0px" y="0px" viewBox="0 0 32 32"
-	 style="enable-background:new 0 0 32 32;" xml:space="preserve">
+	 xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" x="0px" y="0px" viewBox="0 0 110.6 100"
+	 style="enable-background:new 0 0 110.6 100;" xml:space="preserve">
 <style type="text/css">
-	.st0{fill:#F9F9F9;}
-	.st1{fill:#F5333F;}
+	.st0{fill:#F5333F;}
 </style>
 <metadata>
 	<sfw  xmlns="&ns_sfw;">
 		<slices></slices>
-		<sliceSourceBounds  bottomLeftOrigin="true" height="32" width="32" x="0" y="0"></sliceSourceBounds>
+		<sliceSourceBounds  bottomLeftOrigin="true" height="100" width="110.6" x="386.2" y="0"></sliceSourceBounds>
 	</sfw>
 </metadata>
-<path class="st0" d="M27.3,32H4.7C2.1,32,0,29.9,0,27.3V4.7C0,2.1,2.1,0,4.7,0h22.6C29.9,0,32,2.1,32,4.7v22.6
-	C32,29.9,29.9,32,27.3,32z"/>
 <g>
 	<g>
-		<polygon class="st1" points="10.6,11.7 10.6,13.2 27.1,13.2 27.1,18.8 10.6,18.8 10.6,20.3 27.1,20.3 27.1,26 4.9,26 4.9,6 
-			27.1,6 27.1,11.7 		"/>
+		<polygon class="st0" points="28.3,28.3 28.3,35.8 110.6,35.8 110.6,64.2 28.3,64.2 28.3,71.7 110.6,71.7 110.6,100 0,100 0,0 
+			110.6,0 110.6,28.3 		"/>
 	</g>
 </g>
 </svg>

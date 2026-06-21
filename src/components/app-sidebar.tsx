@@ -16,11 +16,12 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
   SidebarRail,
+  SidebarSeparator,
   useSidebar,
 } from "@/components/ui/sidebar"
 import { HugeiconsIcon } from "@hugeicons/react"
 import {
-  MaterialAndTextureIcon,
+  ScissorIcon,
   FolderIcon,
   LayoutGridIcon,
   RulerIcon,
@@ -35,28 +36,13 @@ const workspaceNav: NavItem[] = [
   },
 ]
 
-function QuickOptimizeButton() {
-  const { pathname } = useLocation()
-  const active = pathname === "/quick-optimize" || pathname.startsWith("/quick-optimize/")
-
-  return (
-    <SidebarMenu>
-      <SidebarMenuItem>
-        <SidebarMenuButton
-          tooltip="Quick Optimize"
-          isActive={active}
-          className="bg-primary text-primary-foreground hover:bg-primary/90 hover:text-primary-foreground"
-          render={
-            <Link to="/quick-optimize">
-              <HugeiconsIcon icon={MaterialAndTextureIcon} strokeWidth={2} className="size-4" />
-              <span>Quick Optimize</span>
-            </Link>
-          }
-        />
-      </SidebarMenuItem>
-    </SidebarMenu>
-  )
-}
+const toolsNav: NavItem[] = [
+  {
+    title: "Cutting Optimizer",
+    url: "/cutting-optimizer",
+    icon: <HugeiconsIcon icon={ScissorIcon} strokeWidth={2} className="size-4" />,
+  },
+]
 
 const libraryNav: NavItem[] = [
   {
@@ -99,17 +85,27 @@ function RecentProjects() {
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   return (
-    <Sidebar collapsible="icon" {...props}>
+    <Sidebar collapsible="icon" variant="inset" {...props}>
       <SidebarHeader>
-        <NavUser />
+        <div className="relative flex items-center py-1.5 transition-all duration-200 ease-linear group-data-[collapsible=icon]:justify-center">
+          <img src="/logo.svg" alt="Edgecut" className="h-5 w-auto px-2 transition-opacity duration-200 ease-linear opacity-100 group-data-[collapsible=icon]:opacity-0 group-data-[collapsible=icon]:absolute" />
+          <img src="/logo-mark.svg" alt="Edgecut" className="h-5 w-auto transition-opacity duration-200 ease-linear opacity-0 absolute group-data-[collapsible=icon]:opacity-100 group-data-[collapsible=icon]:static" />
+        </div>
       </SidebarHeader>
       <SidebarContent>
         <NavGroup label="Workspace" items={workspaceNav} />
+        <div className="hidden group-data-[collapsible=icon]:flex justify-center px-3">
+          <SidebarSeparator className="w-8" />
+        </div>
         <NavGroup label="Library" items={libraryNav} />
+        <div className="hidden group-data-[collapsible=icon]:flex justify-center px-3">
+          <SidebarSeparator className="w-8" />
+        </div>
+        <NavGroup label="Tools" items={toolsNav} />
         <RecentProjects />
       </SidebarContent>
       <SidebarFooter>
-        <QuickOptimizeButton />
+        <NavUser />
       </SidebarFooter>
       <SidebarRail />
     </Sidebar>

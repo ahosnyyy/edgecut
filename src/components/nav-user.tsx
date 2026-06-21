@@ -45,10 +45,10 @@ export function NavUser() {
               <SidebarMenuButton size="lg" className="aria-expanded:bg-muted" />
             }
           >
-            <Avatar>
-              <AvatarFallback className="text-xs font-semibold">{initials}</AvatarFallback>
+            <Avatar className="rounded-md after:rounded-md">
+              <AvatarFallback className="rounded-md text-xs font-semibold">{initials}</AvatarFallback>
             </Avatar>
-            <div className="grid flex-1 text-left text-sm leading-tight">
+            <div className="grid flex-1 text-left text-xs leading-tight">
               <span className="truncate font-medium">{user?.name || user?.email}</span>
               <span className="truncate text-xs">{user?.email}</span>
             </div>
@@ -63,8 +63,8 @@ export function NavUser() {
             <DropdownMenuGroup>
               <DropdownMenuLabel className="p-0 font-normal">
                 <div className="flex items-center gap-2 px-1 py-1.5 text-left text-sm">
-                  <Avatar>
-                    <AvatarFallback className="text-xs font-semibold">{initials}</AvatarFallback>
+                  <Avatar className="rounded-md after:rounded-md">
+                    <AvatarFallback className="rounded-md text-xs font-semibold">{initials}</AvatarFallback>
                   </Avatar>
                   <div className="grid flex-1 text-left text-sm leading-tight">
                     <span className="truncate font-medium">{user?.name || user?.email}</span>

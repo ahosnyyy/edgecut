@@ -20,7 +20,7 @@ import { useProject } from "../../hooks/useProjects";
 import { HeaderActionsProvider, useHeaderActions } from "./header-actions";
 
 const routeLabels: Record<string, string> = {
-  "quick-optimize": "Quick Optimize",
+  "cutting-optimizer": "Quick Optimize",
   projects: "Projects",
   "apartment-templates": "Apartment Types",
   templates: "Piece Templates",
@@ -32,6 +32,7 @@ function AppBreadcrumbs() {
   const segments = location.pathname.split("/").filter(Boolean);
 
   const projectId = segments[0] === "projects" && segments[1] ? segments[1] : null;
+  const buildingId = segments[0] === "projects" && segments[2] === "buildings" && segments[3] ? segments[3] : null;
   const { data: project } = useProject(projectId);
 
   if (segments.length === 0) return null;
@@ -45,6 +46,17 @@ function AppBreadcrumbs() {
 
     if (routeLabels[seg]) {
       crumbs.push({ label: routeLabels[seg], path: currentPath });
+    } else if (seg === "buildings") {
+      continue;
+    } else if (projectId && i === 1) {
+      if (project?.name) {
+        crumbs.push({ label: project.name, path: currentPath });
+      } else {
+        crumbs.push({ label: seg.length > 8 ? `${seg.slice(0, 8)}…` : seg, path: currentPath });
+      }
+    } else if (buildingId && i === 3) {
+      const building = project?.buildings?.find((b) => b.id === buildingId);
+      crumbs.push({ label: building?.name ?? "Building", path: currentPath });
     } else if (i === segments.length - 1 && crumbs.length > 0) {
       if (projectId && project?.name) {
         crumbs.push({ label: project.name, path: currentPath });
@@ -79,23 +91,28 @@ function AppBreadcrumbs() {
             </Fragment>
           );
         })}
-        {project?.status && (
-          <Badge
-            variant="secondary"
-            className={
-              "text-xs ml-1 " +
-              (project.status === "active"
-                ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400"
-                : project.status === "completed"
-                  ? "bg-blue-500/15 text-blue-700 dark:text-blue-400"
-                  : project.status === "archived"
-                    ? "bg-zinc-500/15 text-zinc-600 dark:text-zinc-400"
-                    : "bg-amber-500/15 text-amber-700 dark:text-amber-400")
-            }
-          >
-            {project.status.charAt(0).toUpperCase() + project.status.slice(1)}
-          </Badge>
-        )}
+        {(() => {
+          const building = buildingId ? project?.buildings?.find((b) => b.id === buildingId) : null;
+          const status = building?.status ?? project?.status;
+          if (!status) return null;
+          return (
+            <Badge
+              variant="secondary"
+              className={
+                "text-[10px] px-1.5 py-0 h-4 ml-1 " +
+                (status === "active"
+                  ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400"
+                  : status === "completed"
+                    ? "bg-blue-500/15 text-blue-700 dark:text-blue-400"
+                    : status === "archived"
+                      ? "bg-zinc-500/15 text-zinc-600 dark:text-zinc-400"
+                      : "bg-amber-500/15 text-amber-700 dark:text-amber-400")
+              }
+            >
+              {status.charAt(0).toUpperCase() + status.slice(1)}
+            </Badge>
+          );
+        })()}
       </BreadcrumbList>
     </Breadcrumb>
   );
@@ -161,7 +178,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
       <HeaderActionsProvider>
         <SidebarProvider>
           <AppSidebar />
-          <SidebarInset>
+          <SidebarInset className="overflow-hidden">
             <HeaderBar />
             <div className="flex flex-1 flex-col min-h-0 overflow-hidden">
               {children}

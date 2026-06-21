@@ -67,7 +67,7 @@ export default function QuickOptimize() {
   );
   const hasInput = state.stockLengths.length > 0 && state.demandPieces.length > 0;
 
-  useHeaderAction("quick-optimize-save", (
+  useHeaderAction("cutting-optimizer-save", (
     <Button variant="outline" className="gap-1.5" disabled title="Coming in Phase 8">
       <HugeiconsIcon icon={SaveIcon} size={14} />
       Save as Project

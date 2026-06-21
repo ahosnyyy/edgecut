@@ -45,7 +45,7 @@ export function NavGroup({
 
   return (
     <SidebarGroup>
-      {label && <SidebarGroupLabel>{label}</SidebarGroupLabel>}
+      {label && <SidebarGroupLabel className="group-data-[collapsible=icon]:hidden">{label}</SidebarGroupLabel>}
       <SidebarMenu>
         {items.map((item) => {
           const active = isRouteActive(pathname, item.url)

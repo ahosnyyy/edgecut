@@ -82,6 +82,11 @@ export const buildings = sqliteTable("buildings", {
   apartmentsPerFloor: integer("apartments_per_floor").notNull().default(1),
   apartmentLabels: text("apartment_labels").notNull().default("[]"),
   sortOrder: integer("sort_order").notNull().default(0),
+  status: text("status", {
+    enum: ["draft", "active", "completed", "archived"],
+  })
+    .notNull()
+    .default("draft"),
   createdAt: integer("created_at").notNull(),
 });
 

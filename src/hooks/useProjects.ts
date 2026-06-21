@@ -11,6 +11,7 @@ export interface Project {
   apartmentsPerFloor: number;
   apartmentLabels: string;
   buildingCount: number;
+  completedBuildings: number;
   createdAt: number;
   updatedAt: number;
 }
@@ -23,6 +24,7 @@ export interface Building {
   apartmentsPerFloor: number;
   apartmentLabels: string;
   sortOrder: number;
+  status: "draft" | "active" | "completed" | "archived";
   createdAt: number;
 }
 
@@ -162,7 +164,7 @@ export function useUpdateBuilding() {
     }: {
       projectId: string;
       buildingId: string;
-      data: Partial<Pick<Building, "name" | "floors" | "apartmentsPerFloor">> & {
+      data: Partial<Pick<Building, "name" | "floors" | "apartmentsPerFloor" | "status">> & {
         apartmentLabels?: string[];
       };
     }) =>
@@ -172,6 +174,7 @@ export function useUpdateBuilding() {
       }),
     onSuccess: (_data, vars) => {
       qc.invalidateQueries({ queryKey: ["project", vars.projectId] });
+      qc.invalidateQueries({ queryKey: ["projects"] });
     },
   });
 }
@@ -191,6 +194,7 @@ export function useDeleteBuilding() {
       }),
     onSuccess: (_data, vars) => {
       qc.invalidateQueries({ queryKey: ["project", vars.projectId] });
+      qc.invalidateQueries({ queryKey: ["projects"] });
     },
   });
 }
