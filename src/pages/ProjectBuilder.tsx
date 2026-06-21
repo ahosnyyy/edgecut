@@ -355,7 +355,17 @@ export function BuildingDetail({
           />
         </TabsContent>
         <TabsContent value="pieces" className="mt-3">
-          <PiecePools projectId={projectId} />
+          <PiecePools
+            projectId={projectId}
+            building={building}
+            existingAssignments={existingAssignments}
+            existingSizes={existingSizes}
+            aptTemplateNames={aptTemplateNames}
+            onPrev={onPrev}
+            onNext={onNext}
+            hasPrev={hasPrev}
+            hasNext={hasNext}
+          />
         </TabsContent>
         <TabsContent value="settings" className="mt-3">
           <BuildingSettings
@@ -1343,59 +1353,242 @@ function OpeningSizeGrid({
 
 // ─── Piece Pools Tab ──────────────────────────────────────────────────────────
 
-function PiecePools({ projectId }: { projectId: string }) {
-  const { data, isLoading } = useProjectPieces(projectId);
+function PiecePools({
+  projectId, building, existingAssignments, existingSizes, aptTemplateNames, onPrev, onNext, hasPrev, hasNext,
+}: {
+  projectId: string;
+  building: BuildingLike;
+  existingAssignments: { floor: number; apartmentIndex: number; apartmentTemplateId: string | null }[];
+  existingSizes: { apartmentTemplateOpeningId: string; floor: number; apartmentIndex: number; width: number; height: number }[];
+  aptTemplateNames: Record<string, string>;
+  onPrev?: () => void;
+  onNext?: () => void;
+  hasPrev?: boolean;
+  hasNext?: boolean;
+}) {
+  const floors = building.floors;
+  const apartmentsPerFloor = building.apartmentsPerFloor;
+  let apartmentLabels: string[] = [];
+  try { apartmentLabels = JSON.parse(building.apartmentLabels); } catch { apartmentLabels = []; }
+
+  // Build sizes map from existing sizes (read-only, no state needed)
+  const sizes = useMemo(() => {
+    const g: SizeGrid = {};
+    for (const s of existingSizes) {
+      g[`${s.apartmentTemplateOpeningId}_${s.floor}_${s.apartmentIndex}`] = {
+        width: String(s.width),
+        height: String(s.height),
+      };
+    }
+    return g;
+  }, [existingSizes]);
+
+  // Assignment map: floor_aptIndex → templateId
+  const assignmentMap = useMemo(() => {
+    const m: Record<string, string | null> = {};
+    for (const a of existingAssignments) {
+      m[`${a.floor}_${a.apartmentIndex}`] = a.apartmentTemplateId;
+    }
+    return m;
+  }, [existingAssignments]);
+
+  // Collect all unique apartment template IDs used in assignments
+  const usedTemplateIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const a of existingAssignments) {
+      if (a.apartmentTemplateId) ids.add(a.apartmentTemplateId);
+    }
+    return Array.from(ids);
+  }, [existingAssignments]);
+
+  // Fetch openings for each used template
+  const templateQueries = useQueries({
+    queries: usedTemplateIds.map((tplId) => ({
+      queryKey: ["apartment-template", tplId],
+      queryFn: () => apiFetch<{ openings: { id: string; label: string }[] }>(`/api/apartment-templates/${tplId}`),
+      enabled: !!tplId,
+    })),
+  });
+
+  const templateOpeningsMap = useMemo(() => {
+    const m: Record<string, { id: string; label: string }[]> = {};
+    usedTemplateIds.forEach((tplId, i) => {
+      const q = templateQueries[i];
+      if (q?.data?.openings) {
+        m[tplId] = q.data.openings.map((o) => ({ id: o.id, label: o.label }));
+      }
+    });
+    return m;
+  }, [templateQueries, usedTemplateIds]);
+
+  // All unique openings across all used templates
+  const allOpenings = useMemo(() => {
+    const seen = new Set<string>();
+    const list: { id: string; label: string }[] = [];
+    for (const openings of Object.values(templateOpeningsMap)) {
+      for (const o of openings) {
+        if (!seen.has(o.id)) {
+          seen.add(o.id);
+          list.push(o);
+        }
+      }
+    }
+    return list;
+  }, [templateOpeningsMap]);
+
+  // For each opening, group cells by exact W×H and collect floor/apt assignments
+  const openingGroups = useMemo(() => {
+    return allOpenings.map((opening) => {
+      // Collect all cells for this opening that have sizes
+      const cells: { floor: number; aptIndex: number; w: number; h: number }[] = [];
+      for (let f = 0; f < floors; f++) {
+        for (let i = 0; i < apartmentsPerFloor; i++) {
+          const aptTplId = assignmentMap[`${f}_${i}`];
+          if (!aptTplId) continue;
+          const openings = templateOpeningsMap[aptTplId] ?? [];
+          if (!openings.some((o) => o.id === opening.id)) continue;
+          const key = `${opening.id}_${f}_${i}`;
+          const cell = sizes[key];
+          if (!cell || !cell.width || !cell.height) continue;
+          const w = parseFloat(cell.width);
+          const h = parseFloat(cell.height);
+          if (isNaN(w) || isNaN(h)) continue;
+          cells.push({ floor: f, aptIndex: i, w, h });
+        }
+      }
+
+      // Group cells by exact W×H
+      const sizeKeyMap = new Map<string, { floor: number; aptIndex: number; w: number; h: number }[]>();
+      for (const cell of cells) {
+        const sizeKey = `${cell.w}_${cell.h}`;
+        if (!sizeKeyMap.has(sizeKey)) sizeKeyMap.set(sizeKey, []);
+        sizeKeyMap.get(sizeKey)!.push(cell);
+      }
+
+      const sizeGroups = Array.from(sizeKeyMap.entries()).map(([sizeKey, groupCells]) => ({
+        root: sizeKey,
+        avgW: String(groupCells[0].w),
+        avgH: String(groupCells[0].h),
+        locations: groupCells.map((c) =>
+          `${apartmentLabels[c.aptIndex] ?? String.fromCharCode(65 + c.aptIndex)}${c.floor + 1}`
+        ),
+        count: groupCells.length,
+      }));
+
+      return { opening, sizeGroups };
+    });
+  }, [allOpenings, sizes, floors, apartmentsPerFloor, assignmentMap, templateOpeningsMap, apartmentLabels]);
+
+  const [activeOpeningId, setActiveOpeningId] = useState<string | null>(null);
+
+  // Auto-select first opening
+  useEffect(() => {
+    if (!activeOpeningId && allOpenings.length > 0) {
+      setActiveOpeningId(allOpenings[0].id);
+    }
+  }, [allOpenings, activeOpeningId]);
+
+  const activeGroup = openingGroups.find((g) => g.opening.id === activeOpeningId);
+
+  const isLoading = templateQueries.some((q) => q.isLoading);
 
   if (isLoading) {
-    return <div className="text-center text-sm text-muted-foreground py-8">Calculating pieces...</div>;
+    return <div className="text-center text-sm text-muted-foreground py-8">Loading openings...</div>;
   }
 
-  if (!data || data.pools.length === 0) {
+  if (allOpenings.length === 0) {
     return (
       <div className="text-center text-sm text-muted-foreground py-8">
-        No pieces generated. Make sure floor assignments and opening sizes are filled.
+        No openings found. Make sure floor assignments are set.
       </div>
     );
   }
 
   return (
-    <div className="flex flex-col gap-4">
-      <p className="text-xs text-muted-foreground">
-        Pieces are grouped by template + profile type for optimization. Each pool will be optimized separately.
-      </p>
-      {data.pools.map((pool, i) => (
-        <Card key={i}>
-          <CardHeader className="pb-2">
-            <div className="flex items-center gap-2">
-              <CardTitle className="text-sm">{pool.templateName}</CardTitle>
-              <Badge variant="secondary" className="text-[10px]">{pool.profileType}</Badge>
-              <Badge variant="outline" className="text-[10px]">{pool.pieces.length} pieces</Badge>
-            </div>
-          </CardHeader>
-          <CardContent>
-            <div className="rounded-md border">
+    <div className="flex flex-col gap-3">
+      <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1">
+          <Button variant="outline" size="icon" onClick={onPrev} disabled={!hasPrev}>
+            <HugeiconsIcon icon={ArrowLeft01Icon} />
+          </Button>
+          <Button variant="outline" size="icon" onClick={onNext} disabled={!hasNext}>
+            <HugeiconsIcon icon={ArrowRight01Icon} />
+          </Button>
+        </div>
+        <span className="text-sm font-medium">{building.name}</span>
+        <span className="text-xs text-muted-foreground">
+          {building.floors} floors × {building.apartmentsPerFloor} apts · {building.floors * building.apartmentsPerFloor} total
+        </span>
+      </div>
+
+      <div className="flex items-center justify-between">
+        <div className="inline-flex items-center gap-0.5 rounded-md bg-muted p-0.5">
+          {allOpenings.map((o) => (
+            <button
+              key={o.id}
+              type="button"
+              className={`px-3 py-1 text-xs font-medium rounded-md transition-all ${
+                activeOpeningId === o.id
+                  ? "bg-background text-foreground shadow-sm"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+              onClick={() => setActiveOpeningId(o.id)}
+            >
+              {o.label}
+            </button>
+          ))}
+        </div>
+        {activeGroup && (
+          <Badge variant="secondary" className="text-[10px]">{activeGroup.sizeGroups.length} sizes</Badge>
+        )}
+      </div>
+
+      {activeGroup && (
+        <div className="flex flex-col gap-2">
+          {activeGroup.sizeGroups.length === 0 ? (
+            <p className="text-xs text-muted-foreground">No sizes entered yet.</p>
+          ) : (
+            <div className="overflow-x-auto">
               <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className="h-7 text-xs">Label</TableHead>
-                    <TableHead className="h-7 text-xs text-right">Length</TableHead>
-                    <TableHead className="h-7 text-xs text-right">Qty</TableHead>
+                <TableHeader className="sticky top-0 z-10 bg-muted/50 backdrop-blur-sm">
+                  <TableRow className="border-b hover:bg-transparent">
+                    <TableHead className="h-9 text-xs w-24 font-semibold">{activeGroup.opening.label}</TableHead>
+                    <TableHead className="h-9 text-xs text-center font-semibold">Qty</TableHead>
+                    <TableHead className="h-9 text-xs text-start font-semibold">Locations</TableHead>
+                    <TableHead className="h-9 text-xs text-center font-semibold">Width</TableHead>
+                    <TableHead className="h-9 text-xs text-center font-semibold">Height</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {pool.pieces.map((p, j) => (
-                    <TableRow key={j}>
-                      <TableCell className="text-xs py-1.5">{p.label}</TableCell>
-                      <TableCell className="text-xs py-1.5 text-right font-mono">{p.length}</TableCell>
-                      <TableCell className="text-xs py-1.5 text-right">{p.quantity}</TableCell>
+                  {activeGroup.sizeGroups.map((group, idx) => (
+                    <TableRow key={group.root} className="group">
+                      <TableCell className="text-xs font-medium py-1.5 text-muted-foreground group-hover:text-foreground">
+                        Size {idx + 1}
+                      </TableCell>
+                      <TableCell className="py-3 px-4 text-center">
+                        <span className="text-xs">{group.count}</span>
+                      </TableCell>
+                      <TableCell className="py-3 px-4">
+                        <div className="grid grid-cols-3 gap-0.5 w-fit">
+                          {group.locations.map((loc, i) => (
+                            <span key={i} className="text-[10px] text-muted-foreground text-center leading-tight py-0.5 px-1 rounded border border-border/60 w-12">{loc}</span>
+                          ))}
+                        </div>
+                      </TableCell>
+                      <TableCell className="py-3 px-4 text-center">
+                        <span className="text-xs font-mono">{group.avgW}</span>
+                      </TableCell>
+                      <TableCell className="py-3 px-4 text-center">
+                        <span className="text-xs font-mono">{group.avgH}</span>
+                      </TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
               </Table>
             </div>
-          </CardContent>
-        </Card>
-      ))}
+          )}
+        </div>
+      )}
     </div>
   );
 }
