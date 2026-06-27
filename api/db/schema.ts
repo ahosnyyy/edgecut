@@ -241,7 +241,6 @@ export const templates = sqliteTable("templates", {
   id: text("id").primaryKey(),
   name: text("name").notNull(),
   type: text("type", { enum: ["window", "door"] }).notNull(),
-  category: text("category").notNull(),
   profileSystemId: text("profile_system_id"),
   isBuiltin: integer("is_builtin", { mode: "boolean" })
     .notNull()

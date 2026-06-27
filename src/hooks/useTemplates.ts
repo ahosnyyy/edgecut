@@ -5,7 +5,6 @@ export interface Template {
   id: string;
   name: string;
   type: "window" | "door";
-  category: string;
   profileSystemId: string | null;
   isBuiltin: boolean;
   createdAt: number;
@@ -84,7 +83,6 @@ export function useUpdateTemplate() {
       data: {
         name?: string;
         type?: "window" | "door";
-        category?: string;
         profileSystemId?: string | null;
         variables?: { name: string; label: string; defaultValue: number }[];
         pieces?: {

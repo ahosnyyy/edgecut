@@ -60,7 +60,6 @@ templatesRoutes.post("/", async (c) => {
   const body = await c.req.json<{
     name: string;
     type: "window" | "door";
-    category?: string;
     profileSystemId?: string | null;
     variables?: { name: string; label: string; defaultValue: number }[];
     pieces?: {
@@ -82,7 +81,6 @@ templatesRoutes.post("/", async (c) => {
     id,
     name: body.name,
     type: body.type,
-    category: body.category ?? "General",
     profileSystemId: body.profileSystemId ?? null,
     isBuiltin: false,
     createdAt: now,
@@ -136,7 +134,7 @@ templatesRoutes.post("/", async (c) => {
     }
   }
 
-  return c.json({ id, name: body.name, type: body.type, category: body.category ?? "General", profileSystemId: body.profileSystemId ?? null, isBuiltin: false }, 201);
+  return c.json({ id, name: body.name, type: body.type, profileSystemId: body.profileSystemId ?? null, isBuiltin: false }, 201);
 });
 
 // ─── PUT /api/templates/:id — Update template (only non-builtin) ─────────────
@@ -160,7 +158,6 @@ templatesRoutes.put("/:id", async (c) => {
   const body = await c.req.json<{
     name?: string;
     type?: "window" | "door";
-    category?: string;
     profileSystemId?: string | null;
     variables?: { name: string; label: string; defaultValue: number }[];
     pieces?: {
@@ -177,7 +174,6 @@ templatesRoutes.put("/:id", async (c) => {
     .set({
       name: body.name ?? existing[0].name,
       type: body.type ?? existing[0].type,
-      category: body.category ?? existing[0].category,
       profileSystemId: body.profileSystemId !== undefined ? body.profileSystemId : existing[0].profileSystemId,
       updatedAt: now,
     })
@@ -290,7 +286,6 @@ templatesRoutes.post("/:id/duplicate", async (c) => {
     id: newId,
     name: `${tpl[0].name} (Copy)`,
     type: tpl[0].type,
-    category: tpl[0].category,
     profileSystemId: tpl[0].profileSystemId,
     isBuiltin: false,
     createdAt: now,
