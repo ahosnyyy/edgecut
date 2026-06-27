@@ -63,6 +63,7 @@ export default function BuildingDetailPage() {
           building={building as BuildingLike}
           projectId={id!}
           aptTemplates={aptTemplates ?? []}
+          projectProfileSystems={project.profileSystem ?? []}
           existingAssignments={project.assignments.filter((a) => a.buildingId === building.id)}
           existingSizes={project.openingSizes.filter((s) => s.buildingId === building.id)}
           aptTemplateNames={aptTemplateNames}

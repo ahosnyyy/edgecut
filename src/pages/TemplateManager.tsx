@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import React, { useState, useMemo } from "react";
 import {
   useTemplates,
   useTemplate,
@@ -9,7 +9,7 @@ import {
   type TemplateDetail,
 } from "../hooks/useTemplates";
 import { Button } from "../components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card";
+import { Card, CardAction, CardDescription, CardFooter, CardHeader, CardTitle } from "../components/ui/card";
 import { Input } from "../components/ui/input";
 import { Label } from "../components/ui/label";
 import { Badge } from "../components/ui/badge";
@@ -39,6 +39,7 @@ import {
   AlertDialogTitle,
 } from "../components/ui/alert-dialog";
 import { ScrollArea } from "../components/ui/scroll-area";
+import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "../components/ui/empty";
 import {
   Table,
   TableBody,
@@ -49,22 +50,22 @@ import {
 } from "../components/ui/table";
 import { evaluateFormula, type FormulaContext } from "../engine/formula";
 import { generatePieces } from "../engine/pieceGenerator";
+import { useProfileSystems, type SystemConstant, type DefaultPiece } from "../hooks/useProfileSystems";
 import {
   Add01Icon,
+  AddSquareIcon,
   Copy01Icon,
   LockIcon,
   AlertCircleIcon,
-  Delete01Icon,
+  Delete02Icon,
+  PencilEdit01Icon,
   CheckmarkCircle01Icon,
+  Search01Icon,
+  FilterIcon,
+  RulerIcon,
+  Download04Icon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
-import { useHeaderAction } from "../components/layout/header-actions";
-
-interface VariableRow {
-  name: string;
-  label: string;
-  defaultValue: number;
-}
 
 interface PieceRow {
   id: string;
@@ -77,15 +78,15 @@ interface PieceRow {
 function emptyTemplate(): {
   name: string;
   type: "window" | "door";
-  category: string;
-  variables: VariableRow[];
+  profileSystemId: string | null;
+  variables: never[];
   pieces: PieceRow[];
 } {
   return {
     name: "",
     type: "window",
-    category: "Custom",
-    variables: [{ name: "frameDepth", label: "Frame Depth", defaultValue: 60 }],
+    profileSystemId: null,
+    variables: [],
     pieces: [],
   };
 }
@@ -93,21 +94,15 @@ function emptyTemplate(): {
 function templateFromDetail(detail: TemplateDetail): {
   name: string;
   type: "window" | "door";
-  category: string;
-  variables: VariableRow[];
+  profileSystemId: string | null;
+  variables: never[];
   pieces: PieceRow[];
 } {
   return {
     name: detail.name,
     type: detail.type,
-    category: detail.category,
-    variables: detail.variables
-      .sort((a, b) => a.sortOrder - b.sortOrder)
-      .map((v) => ({
-        name: v.name,
-        label: v.label,
-        defaultValue: v.defaultValue,
-      })),
+    profileSystemId: detail.profileSystemId ?? null,
+    variables: [],
     pieces: detail.pieces
       .sort((a, b) => a.sortOrder - b.sortOrder)
       .map((p) => ({
@@ -122,11 +117,31 @@ function templateFromDetail(detail: TemplateDetail): {
 
 export default function TemplateManager() {
   const { data: templates, isLoading } = useTemplates();
+  const { data: profileSystemsList } = useProfileSystems();
   const [editingId, setEditingId] = useState<string | null>(null);
   const [isCreating, setIsCreating] = useState(false);
   const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [search, setSearch] = useState("");
+  const [filterType, setFilterType] = useState<string>("all");
 
   const { data: editingDetail } = useTemplate(editingId);
+
+  const filtered = useMemo(() => {
+    const list = templates ?? [];
+    let result = list;
+    if (filterType !== "all") {
+      result = result.filter((t) => t.type === filterType);
+    }
+    if (search.trim()) {
+      const q = search.toLowerCase();
+      result = result.filter(
+        (t) =>
+          t.name.toLowerCase().includes(q) ||
+          (t.profileSystemId && profileSystemsList?.find((s) => s.id === t.profileSystemId)?.name.toLowerCase().includes(q)),
+      );
+    }
+    return result;
+  }, [templates, search, filterType]);
 
   const handleEdit = (id: string) => {
     setEditingId(id);
@@ -143,74 +158,170 @@ export default function TemplateManager() {
     setIsCreating(false);
   };
 
-  useHeaderAction("template-new", (
-    <Button className="gap-1.5" onClick={handleNew}>
-      <HugeiconsIcon icon={Add01Icon} size={14} />
-      New Template
-    </Button>
-  ));
-
   return (
     <div className="flex flex-col h-full overflow-hidden">
+      <div className="flex items-center justify-between gap-3 px-4 py-3 shrink-0">
+        <div className="flex items-center gap-2">
+          <h1 className="text-lg font-semibold">Piece Templates</h1>
+          {templates && templates.length > 0 && (
+            <Badge variant="secondary" className="text-xs">
+              {templates.length}
+            </Badge>
+          )}
+        </div>
+        <div className="flex items-center gap-2">
+          <div className="relative">
+            <HugeiconsIcon
+              icon={Search01Icon}
+              size={14}
+              className="absolute left-2 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none"
+            />
+            <Input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search by name..."
+              className="w-48 pl-7 text-xs"
+            />
+          </div>
+          <Select
+            value={filterType}
+            onValueChange={(v) => setFilterType(v ?? "all")}
+          >
+            <SelectTrigger className="w-32 h-8 text-xs gap-1.5">
+              <HugeiconsIcon icon={FilterIcon} size={14} className="text-muted-foreground" />
+              <SelectValue>
+                {filterType === "all" ? "All Types" : filterType === "window" ? "Windows" : "Doors"}
+              </SelectValue>
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Types</SelectItem>
+              <SelectItem value="window">Windows</SelectItem>
+              <SelectItem value="door">Doors</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+
       <ScrollArea className="flex-1">
         <div className="p-4">
           {isLoading ? (
             <div className="text-center text-sm text-muted-foreground py-8">
               Loading templates...
             </div>
+          ) : filtered.length === 0 ? (
+            search.trim() || filterType !== "all" ? (
+              <Empty>
+                <EmptyHeader>
+                  <EmptyMedia variant="icon">
+                    <HugeiconsIcon icon={FilterIcon} />
+                  </EmptyMedia>
+                  <EmptyTitle>No templates match your filters</EmptyTitle>
+                  <EmptyDescription>
+                    {search.trim()
+                      ? `No results for "${search.trim()}".`
+                      : `No ${filterType} templates found.`}
+                  </EmptyDescription>
+                </EmptyHeader>
+                <EmptyContent>
+                  <Button variant="outline" size="sm" onClick={() => { setSearch(""); setFilterType("all"); }}>
+                    Clear filters
+                  </Button>
+                </EmptyContent>
+              </Empty>
+            ) : (
+              <Empty>
+                <EmptyHeader>
+                  <EmptyMedia variant="icon">
+                    <HugeiconsIcon icon={RulerIcon} />
+                  </EmptyMedia>
+                  <EmptyTitle>No piece templates yet</EmptyTitle>
+                  <EmptyDescription>
+                    Define reusable piece templates with variables and formulas. Apartment types reference these when creating openings.
+                  </EmptyDescription>
+                </EmptyHeader>
+                <EmptyContent>
+                  <Button className="gap-2" size="lg" onClick={handleNew}>
+                    <HugeiconsIcon icon={Add01Icon} size={14} strokeWidth={2} />
+                    New Template
+                  </Button>
+                </EmptyContent>
+              </Empty>
+            )
           ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-              {templates?.map((tpl) => (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+              <Card
+                size="sm"
+                className="cursor-pointer border border-dashed border-muted-foreground/30 ring-0 bg-muted/10 hover:border-primary/40 hover:bg-muted/20 transition-colors"
+                onClick={handleNew}
+              >
+                <div className="flex flex-col items-center justify-center gap-1.5 py-3">
+                  <HugeiconsIcon icon={AddSquareIcon} size={20} className="text-muted-foreground" />
+                  <span className="text-sm text-muted-foreground">New Template</span>
+                </div>
+              </Card>
+              {filtered.map((tpl) => (
                 <Card
                   key={tpl.id}
-                  className="cursor-pointer hover:border-primary/40 transition-colors"
+                  size="sm"
+                  className="pb-0 cursor-pointer hover:border-primary/40 transition-colors group"
                   onClick={() => handleEdit(tpl.id)}
                 >
-                  <CardHeader className="pb-2">
-                    <div className="flex items-start justify-between">
-                      <div className="flex-1 min-w-0">
-                        <CardTitle className="text-sm truncate">
-                          {tpl.name}
-                        </CardTitle>
-                        <p className="text-xs text-muted-foreground mt-0.5">
-                          {tpl.category}
-                        </p>
-                      </div>
-                      {tpl.isBuiltin && (
-                        <HugeiconsIcon
-                          icon={LockIcon}
-                          size={14}
-                          className="text-muted-foreground shrink-0"
-                        />
-                      )}
-                    </div>
-                  </CardHeader>
-                  <CardContent className="pt-0 pb-3">
-                    <div className="flex items-center gap-2">
-                      <Badge variant="secondary" className="text-[10px]">
-                        {tpl.type}
-                      </Badge>
-                      {tpl.isBuiltin ? (
-                        <Badge variant="outline" className="text-[10px] gap-1">
-                          <HugeiconsIcon icon={LockIcon} size={10} />
-                          Built-in
-                        </Badge>
-                      ) : (
+                  <CardHeader className="pb-1">
+                    <CardAction>
+                      <div className="flex items-center gap-1">
                         <Button
                           variant="ghost"
                           size="sm"
-                          className="h-6 text-xs gap-1 px-2 text-destructive hover:text-destructive"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setDeleteId(tpl.id);
-                          }}
+                          className="h-6 w-6 p-0 text-muted-foreground hover:text-foreground opacity-0 group-hover:opacity-100"
+                          onClick={(e) => { e.stopPropagation(); handleEdit(tpl.id); }}
                         >
-                          <HugeiconsIcon icon={Delete01Icon} size={12} />
-                          Delete
+                          <HugeiconsIcon icon={PencilEdit01Icon} size={13} />
                         </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-6 w-6 p-0 text-muted-foreground hover:text-destructive opacity-0 group-hover:opacity-100"
+                          onClick={(e) => { e.stopPropagation(); setDeleteId(tpl.id); }}
+                        >
+                          <HugeiconsIcon icon={Delete02Icon} size={13} />
+                        </Button>
+                      </div>
+                    </CardAction>
+                    <CardTitle className="text-sm truncate flex items-center gap-1.5">
+                      {tpl.name}
+                      {tpl.isBuiltin && (
+                        <HugeiconsIcon icon={LockIcon} size={11} className="text-muted-foreground shrink-0" />
                       )}
+                    </CardTitle>
+                    <CardDescription className="text-xs truncate">
+                      {(() => {
+                        const sys = tpl.profileSystemId ? profileSystemsList?.find((s) => s.id === tpl.profileSystemId) : null;
+                        return sys ? sys.name : "No profile system";
+                      })()}
+                    </CardDescription>
+                  </CardHeader>
+                  <CardFooter className="bg-muted/50 py-2.5">
+                    <div className="flex items-center justify-between w-full gap-2 text-[10px] text-muted-foreground">
+                      <div className="flex items-center gap-2">
+                        <Badge variant="secondary" className="text-[9px] px-1 py-0 h-4 capitalize">
+                          {tpl.type}
+                        </Badge>
+                        {tpl.profileSystemId && profileSystemsList && (
+                          <Badge variant="outline" className="text-[9px] px-1 py-0 h-4">
+                            {profileSystemsList.find((s) => s.id === tpl.profileSystemId)?.name ?? "Unknown"}
+                          </Badge>
+                        )}
+                        {tpl.isBuiltin && (
+                          <Badge variant="outline" className="text-[9px] px-1 py-0 h-4 gap-0.5">
+                            <HugeiconsIcon icon={LockIcon} size={8} />
+                            Built-in
+                          </Badge>
+                        )}
+                        <Separator orientation="vertical" className="my-0.5" />
+                        <span>Created {new Date(tpl.createdAt).toLocaleDateString("en-GB")}</span>
+                      </div>
                     </div>
-                  </CardContent>
+                  </CardFooter>
                 </Card>
               ))}
             </div>
@@ -218,7 +329,6 @@ export default function TemplateManager() {
         </div>
       </ScrollArea>
 
-      {/* Editor Dialog */}
       {(editingId || isCreating) && (
         <TemplateEditor
           templateId={editingId}
@@ -228,7 +338,6 @@ export default function TemplateManager() {
         />
       )}
 
-      {/* Delete Confirmation */}
       <AlertDialog
         open={!!deleteId}
         onOpenChange={(open) => !open && setDeleteId(null)}
@@ -293,39 +402,57 @@ function TemplateEditor({
   const createMutation = useCreateTemplate();
   const updateMutation = useUpdateTemplate();
   const duplicateMutation = useDuplicateTemplate();
+  const { data: profileSystemsList } = useProfileSystems();
 
   const [form, setForm] = useState(() => {
     if (detail) return templateFromDetail(detail);
     return emptyTemplate();
   });
 
-  const [previewW, setPreviewW] = useState(1500);
+  const [previewW, setPreviewW] = useState(1200);
   const [previewH, setPreviewH] = useState(1400);
   const [saveError, setSaveError] = useState<string | null>(null);
 
   const isBuiltin = detail?.isBuiltin ?? false;
   const isLoadingDetail = !!templateId && !detail;
 
+  // Resolve system constants for the selected profile system
+  const systemConstants = useMemo((): SystemConstant[] => {
+    if (!form.profileSystemId || !profileSystemsList) return [];
+    const sys = profileSystemsList.find((s) => s.id === form.profileSystemId);
+    if (!sys) return [];
+    try {
+      return JSON.parse(sys.constants) as SystemConstant[];
+    } catch {
+      return [];
+    }
+  }, [form.profileSystemId, profileSystemsList]);
+
+  // Build formula context with system constants
+  const formulaCtx = useMemo((): FormulaContext => {
+    const ctx: FormulaContext = { W: previewW, H: previewH };
+    for (const c of systemConstants) {
+      ctx[c.name] = c.defaultValue;
+    }
+    return ctx;
+  }, [previewW, previewH, systemConstants]);
+
   const previewPieces = useMemo(() => {
     const piecesWithIds = form.pieces.map((p) => ({
       ...p,
       id: p.id || crypto.randomUUID(),
     }));
-    return generatePieces(piecesWithIds, form.variables, previewW, previewH);
-  }, [form.pieces, form.variables, previewW, previewH]);
+    return generatePieces(piecesWithIds, systemConstants, previewW, previewH);
+  }, [form.pieces, systemConstants, previewW, previewH]);
 
   const formulaErrors = useMemo(() => {
     const errors: Record<number, string | null> = {};
     form.pieces.forEach((p, i) => {
-      const ctx: FormulaContext = { W: previewW, H: previewH };
-      for (const v of form.variables) {
-        ctx[v.name] = v.defaultValue;
-      }
-      const result = evaluateFormula(p.lengthFormula, ctx);
+      const result = evaluateFormula(p.lengthFormula, formulaCtx);
       errors[i] = result.error;
     });
     return errors;
-  }, [form.pieces, form.variables, previewW, previewH]);
+  }, [form.pieces, formulaCtx]);
 
   const hasErrors = Object.values(formulaErrors).some((e) => e !== null);
 
@@ -359,29 +486,6 @@ function TemplateEditor({
     } catch (err) {
       setSaveError(err instanceof Error ? err.message : "Duplicate failed");
     }
-  };
-
-  const addVariable = () => {
-    setForm((f) => ({
-      ...f,
-      variables: [...f.variables, { name: "", label: "", defaultValue: 0 }],
-    }));
-  };
-
-  const updateVariable = (index: number, field: keyof VariableRow, value: string | number) => {
-    setForm((f) => ({
-      ...f,
-      variables: f.variables.map((v, i) =>
-        i === index ? { ...v, [field]: value } : v,
-      ),
-    }));
-  };
-
-  const removeVariable = (index: number) => {
-    setForm((f) => ({
-      ...f,
-      variables: f.variables.filter((_, i) => i !== index),
-    }));
   };
 
   const addPiece = () => {
@@ -419,7 +523,7 @@ function TemplateEditor({
   if (isLoadingDetail) {
     return (
       <Dialog open={true} onOpenChange={onClose}>
-        <DialogContent className="max-w-2xl">
+        <DialogContent className="sm:max-w-3xl">
           <div className="py-8 text-center text-sm text-muted-foreground">
             Loading template...
           </div>
@@ -430,7 +534,7 @@ function TemplateEditor({
 
   return (
     <Dialog open={true} onOpenChange={onClose}>
-      <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto">
+      <DialogContent className="sm:max-w-3xl max-h-[85vh] flex flex-col">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             {isCreating ? "New Template" : form.name}
@@ -443,11 +547,11 @@ function TemplateEditor({
           </DialogTitle>
         </DialogHeader>
 
-        <div className="flex flex-col gap-4">
-          {/* Basic Info */}
-          <div className="grid grid-cols-2 gap-3">
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor="tpl-name">Name</Label>
+        {/* Fixed top fields */}
+        <div className="flex flex-col gap-2 shrink-0">
+          <div className="flex items-end gap-3">
+            <div className="flex flex-col gap-1.5 flex-1">
+              <Label htmlFor="tpl-name">Name <span className="text-red-500">*</span></Label>
               <Input
                 id="tpl-name"
                 value={form.name}
@@ -456,208 +560,232 @@ function TemplateEditor({
                 placeholder="e.g. Casement Window 2-Panel"
               />
             </div>
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor="tpl-category">Category</Label>
-              <Input
-                id="tpl-category"
-                value={form.category}
-                onChange={(e) => setForm((f) => ({ ...f, category: e.target.value }))}
+            <div className="flex flex-col gap-1.5 w-32 shrink-0">
+              <Label htmlFor="tpl-type">Type</Label>
+              <Select
+                value={form.type}
+                onValueChange={(v: "window" | "door" | null) => setForm((f) => ({ ...f, type: v ?? "window" }))}
                 disabled={isBuiltin}
-                placeholder="e.g. Casement"
-              />
+              >
+                <SelectTrigger id="tpl-type" className="w-full">
+                  <SelectValue>
+                    {form.type === "window" ? "Window" : "Door"}
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="window">Window</SelectItem>
+                  <SelectItem value="door">Door</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="flex flex-col gap-1.5 flex-1">
+              <Label htmlFor="tpl-profile-system">Profile System</Label>
+              <Select
+                value={form.profileSystemId ?? "none"}
+                onValueChange={(v: string | null) => setForm((f) => ({ ...f, profileSystemId: v === "none" ? null : v }))}
+                disabled={isBuiltin}
+              >
+                <SelectTrigger id="tpl-profile-system" className="w-full">
+                  <SelectValue>
+                    {form.profileSystemId
+                      ? profileSystemsList?.find((s) => s.id === form.profileSystemId)?.name ?? "Unknown"
+                      : "Select..."}
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">None</SelectItem>
+                  {profileSystemsList?.map((sys) => (
+                    <SelectItem key={sys.id} value={sys.id}>
+                      {sys.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
           </div>
-
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="tpl-type">Type</Label>
-            <Select
-              value={form.type}
-              onValueChange={(v: "window" | "door" | null) => setForm((f) => ({ ...f, type: v ?? "window" }))}
-              disabled={isBuiltin}
-            >
-              <SelectTrigger id="tpl-type">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="window">Window</SelectItem>
-                <SelectItem value="door">Door</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-
-          <Separator />
-
-          {/* Variables */}
-          <div className="flex flex-col gap-2">
-            <div className="flex items-center justify-between">
-              <h3 className="text-sm font-semibold">Variables</h3>
-              {!isBuiltin && (
-                <Button variant="outline" size="sm" className="h-7 gap-1 text-xs" onClick={addVariable}>
-                  <HugeiconsIcon icon={Add01Icon} size={12} />
-                  Add Variable
-                </Button>
-              )}
-            </div>
-            <div className="flex flex-col gap-2">
-              {form.variables.map((v, i) => (
-                <div key={i} className="grid grid-cols-[1fr_1fr_80px_28px] gap-2 items-end">
-                  <div>
-                    <Label className="text-[10px] text-muted-foreground">Name</Label>
-                    <Input
-                      value={v.name}
-                      onChange={(e) => updateVariable(i, "name", e.target.value)}
-                      disabled={isBuiltin}
-                      placeholder="frameDepth"
-                      className="font-mono text-xs"
-                    />
-                  </div>
-                  <div>
-                    <Label className="text-[10px] text-muted-foreground">Label</Label>
-                    <Input
-                      value={v.label}
-                      onChange={(e) => updateVariable(i, "label", e.target.value)}
-                      disabled={isBuiltin}
-                      placeholder="Frame Depth"
-                      className="text-xs"
-                    />
-                  </div>
-                  <div>
-                    <Label className="text-[10px] text-muted-foreground">Default</Label>
-                    <Input
-                      type="number"
-                      value={v.defaultValue}
-                      onChange={(e) => updateVariable(i, "defaultValue", parseFloat(e.target.value) || 0)}
-                      disabled={isBuiltin}
-                      className="text-xs"
-                    />
-                  </div>
-                  {!isBuiltin && (
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-7 w-7 text-muted-foreground hover:text-destructive shrink-0"
-                      onClick={() => removeVariable(i)}
-                    >
-                      <HugeiconsIcon icon={Delete01Icon} size={14} />
-                    </Button>
-                  )}
-                </div>
+          {systemConstants.length > 0 && (
+            <div className="flex flex-wrap gap-1">
+              {systemConstants.map((c) => (
+                <Badge key={c.name} variant="secondary" className="text-[9px] h-4 px-1.5 font-mono">
+                  {c.name}={c.defaultValue}
+                </Badge>
               ))}
-              {form.variables.length === 0 && (
-                <p className="text-xs text-muted-foreground">No variables defined. W and H are always available.</p>
-              )}
             </div>
-          </div>
+          )}
+        </div>
 
-          <Separator />
+        <Separator className="shrink-0" />
+
+        {/* Scrollable content: pieces + preview */}
+        <div className="flex flex-col gap-3 overflow-y-auto pr-1">
 
           {/* Pieces */}
           <div className="flex flex-col gap-2">
-            <div className="flex items-center justify-between">
-              <h3 className="text-sm font-semibold">Pieces</h3>
+            <div className="flex items-center justify-between shrink-0">
+              <div className="flex items-center gap-2">
+                <h3 className="text-sm font-semibold">Cutting Pieces</h3>
+                {form.pieces.length > 0 && (
+                  <Badge variant="secondary" className="text-[10px] h-4 px-1.5">
+                    {form.pieces.length}
+                  </Badge>
+                )}
+              </div>
               {!isBuiltin && (
-                <Button variant="outline" size="sm" className="h-7 gap-1 text-xs" onClick={addPiece}>
-                  <HugeiconsIcon icon={Add01Icon} size={12} />
-                  Add Piece
-                </Button>
+                <div className="flex items-center gap-1.5">
+                  {form.profileSystemId && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-7 gap-1 text-xs"
+                      onClick={() => {
+                        const sys = profileSystemsList?.find((s) => s.id === form.profileSystemId);
+                        if (!sys?.defaultPieces) return;
+                        try {
+                          const pieces = JSON.parse(sys.defaultPieces) as DefaultPiece[];
+                          if (pieces.length === 0) return;
+                          const replace = form.pieces.length === 0 || window.confirm(
+                            `Replace existing ${form.pieces.length} piece(s) with ${pieces.length} default piece(s) from ${sys.name}?`
+                          );
+                          if (!replace) return;
+                          setForm((f) => ({
+                            ...f,
+                            pieces: pieces.map((p) => ({
+                              id: crypto.randomUUID(),
+                              label: p.label,
+                              profileType: p.profileType as PieceRow["profileType"],
+                              lengthFormula: p.lengthFormula,
+                              quantity: p.quantity,
+                            })),
+                          }));
+                        } catch {
+                          // ignore parse errors
+                        }
+                      }}
+                    >
+                      <HugeiconsIcon icon={Download04Icon} size={12} />
+                      Load from System
+                    </Button>
+                  )}
+                  <Button variant="outline" size="sm" className="h-7 gap-1 text-xs" onClick={addPiece}>
+                    <HugeiconsIcon icon={Add01Icon} size={12} />
+                    Add Piece
+                  </Button>
+                </div>
               )}
             </div>
-            <div className="flex flex-col gap-2">
+            <p className="text-[11px] text-muted-foreground -mt-1">
+              Use <code className="font-mono text-[10px] px-1 py-0.5 rounded bg-muted">W</code> for opening width and <code className="font-mono text-[10px] px-1 py-0.5 rounded bg-muted">H</code> for opening height (in mm).
+              {systemConstants.length > 0 && (
+                <> System constants: {systemConstants.map((c) => (
+                  <code key={c.name} className="font-mono text-[10px] px-1 py-0.5 rounded bg-muted">{c.name}</code>
+                )).reduce<React.ReactNode[]>((acc, el, i) => {
+                  if (i > 0) acc.push(", ");
+                  acc.push(el);
+                  return acc;
+                }, [])}.</>
+              )}
+            </p>
+            <div className="flex flex-col gap-1.5">
               {form.pieces.map((p, i) => (
-                <div key={i} className="grid grid-cols-[1fr_100px_1fr_60px_28px] gap-2 items-end">
-                  <div>
-                    <Label className="text-[10px] text-muted-foreground">Label</Label>
-                    <Input
-                      value={p.label}
-                      onChange={(e) => updatePiece(i, "label", e.target.value)}
-                      disabled={isBuiltin}
-                      placeholder="Frame Top"
-                      className="text-xs"
-                    />
-                  </div>
-                  <div>
-                    <Label className="text-[10px] text-muted-foreground">Profile</Label>
-                    <Select
-                      value={p.profileType}
-                      onValueChange={(v: PieceRow["profileType"] | null) => updatePiece(i, "profileType", v ?? "frame")}
-                      disabled={isBuiltin}
-                    >
-                      <SelectTrigger className="text-xs h-7">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="frame">Frame</SelectItem>
-                        <SelectItem value="sash">Sash</SelectItem>
-                        <SelectItem value="mullion">Mullion</SelectItem>
-                        <SelectItem value="bead">Bead</SelectItem>
-                        <SelectItem value="custom">Custom</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div>
-                    <Label className="text-[10px] text-muted-foreground">Formula</Label>
-                    <Input
-                      value={p.lengthFormula}
-                      onChange={(e) => updatePiece(i, "lengthFormula", e.target.value)}
-                      disabled={isBuiltin}
-                      placeholder="W - 2*frameDepth"
-                      className={`font-mono text-xs ${formulaErrors[i] ? "border-destructive" : ""}`}
-                    />
-                    {formulaErrors[i] && (
-                      <p className="text-[10px] text-destructive mt-0.5">{formulaErrors[i]}</p>
-                    )}
-                  </div>
-                  <div>
+                <div key={i} className="flex items-center gap-2 rounded-md border bg-muted/30 px-2 py-1.5">
+                  <span className="text-[10px] text-muted-foreground w-4 shrink-0 text-center font-medium">{i + 1}</span>
+                  <Input
+                    value={p.label}
+                    onChange={(e) => updatePiece(i, "label", e.target.value)}
+                    disabled={isBuiltin}
+                    placeholder="Frame Width"
+                    className="text-xs h-7 border-0 bg-background w-28 shrink-0"
+                  />
+                  <Select
+                    value={p.profileType}
+                    onValueChange={(v: PieceRow["profileType"] | null) => updatePiece(i, "profileType", v ?? "frame")}
+                    disabled={isBuiltin}
+                  >
+                    <SelectTrigger className="text-xs h-7 w-24 border-0 bg-background shrink-0 capitalize">
+                      <SelectValue>
+                        {p.profileType}
+                      </SelectValue>
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="frame">Frame</SelectItem>
+                      <SelectItem value="sash">Sash</SelectItem>
+                      <SelectItem value="mullion">Mullion</SelectItem>
+                      <SelectItem value="bead">Bead</SelectItem>
+                      <SelectItem value="custom">Custom</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <Input
+                    value={p.lengthFormula}
+                    onChange={(e) => updatePiece(i, "lengthFormula", e.target.value)}
+                    disabled={isBuiltin}
+                    placeholder="W + 6"
+                    className={`font-mono text-xs h-7 border-0 bg-background flex-1 ${formulaErrors[i] ? "ring-1 ring-destructive" : ""}`}
+                  />
+                  <div className="flex items-center gap-1 shrink-0">
                     <Label className="text-[10px] text-muted-foreground">Qty</Label>
                     <Input
                       type="number"
                       value={p.quantity}
                       onChange={(e) => updatePiece(i, "quantity", parseInt(e.target.value) || 1)}
                       disabled={isBuiltin}
-                      className="text-xs"
+                      className="text-xs h-7 w-14 border-0 bg-background"
                     />
                   </div>
                   {!isBuiltin && (
                     <Button
                       variant="ghost"
                       size="icon"
-                      className="h-7 w-7 text-muted-foreground hover:text-destructive shrink-0"
+                      className="h-6 w-6 text-muted-foreground hover:text-destructive shrink-0"
                       onClick={() => removePiece(i)}
                     >
-                      <HugeiconsIcon icon={Delete01Icon} size={14} />
+                      <HugeiconsIcon icon={Delete02Icon} size={12} />
                     </Button>
                   )}
                 </div>
               ))}
               {form.pieces.length === 0 && (
-                <p className="text-xs text-muted-foreground">No pieces defined.</p>
+                <div className="flex flex-col items-center justify-center gap-1.5 py-5 text-center rounded-md border border-dashed border-muted-foreground/20">
+                  <HugeiconsIcon icon={AddSquareIcon} size={20} className="text-muted-foreground/40" />
+                  <p className="text-xs text-muted-foreground">
+                    {form.profileSystemId
+                      ? "No pieces yet. Click \"Load from System\" to auto-generate, or \"Add Piece\" manually."
+                      : "No pieces defined. Select a profile system to auto-generate, or add manually."}
+                  </p>
+                </div>
               )}
             </div>
+            {hasErrors && (
+              <p className="text-[11px] text-destructive">Fix formula errors before saving.</p>
+            )}
           </div>
 
-          <Separator />
+          <Separator className="shrink-0" />
 
           {/* Live Preview */}
-          <div className="flex flex-col gap-2">
-            <h3 className="text-sm font-semibold">Live Preview</h3>
-            <div className="flex items-center gap-3">
-              <div className="flex items-center gap-1.5">
-                <Label className="text-xs text-muted-foreground">W</Label>
-                <Input
-                  type="number"
-                  value={previewW}
-                  onChange={(e) => setPreviewW(parseFloat(e.target.value) || 0)}
-                  className="w-24 text-xs"
-                />
-              </div>
-              <div className="flex items-center gap-1.5">
-                <Label className="text-xs text-muted-foreground">H</Label>
-                <Input
-                  type="number"
-                  value={previewH}
-                  onChange={(e) => setPreviewH(parseFloat(e.target.value) || 0)}
-                  className="w-24 text-xs"
-                />
+          <div className="flex flex-col gap-2 shrink-0">
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-semibold">Cut Preview</h3>
+              <div className="flex items-center gap-2">
+                <div className="flex items-center gap-1.5">
+                  <Label className="text-xs text-muted-foreground">Opening W</Label>
+                  <Input
+                    type="number"
+                    value={previewW}
+                    onChange={(e) => setPreviewW(parseFloat(e.target.value) || 0)}
+                    className="w-20 text-xs h-7"
+                  />
+                  <span className="text-[10px] text-muted-foreground">mm</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <Label className="text-xs text-muted-foreground">H</Label>
+                  <Input
+                    type="number"
+                    value={previewH}
+                    onChange={(e) => setPreviewH(parseFloat(e.target.value) || 0)}
+                    className="w-20 text-xs h-7"
+                  />
+                  <span className="text-[10px] text-muted-foreground">mm</span>
+                </div>
               </div>
             </div>
             <div className="rounded-md border">
@@ -666,7 +794,7 @@ function TemplateEditor({
                   <TableRow>
                     <TableHead className="h-7 text-xs">Label</TableHead>
                     <TableHead className="h-7 text-xs">Profile</TableHead>
-                    <TableHead className="h-7 text-xs text-right">Length</TableHead>
+                    <TableHead className="h-7 text-xs text-right">Length (mm)</TableHead>
                     <TableHead className="h-7 text-xs text-right">Qty</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -674,7 +802,7 @@ function TemplateEditor({
                   {previewPieces.pieces.map((p, i) => (
                     <TableRow key={i}>
                       <TableCell className="text-xs py-1.5">{p.label}</TableCell>
-                      <TableCell className="text-xs py-1.5">{p.profileType}</TableCell>
+                      <TableCell className="text-xs py-1.5 capitalize">{p.profileType}</TableCell>
                       <TableCell className="text-xs py-1.5 text-right font-mono">{p.length}</TableCell>
                       <TableCell className="text-xs py-1.5 text-right">{p.quantity}</TableCell>
                     </TableRow>
@@ -693,25 +821,32 @@ function TemplateEditor({
                       </TableCell>
                     </TableRow>
                   )}
+                  {previewPieces.pieces.length > 0 && (
+                    <TableRow className="border-t-2 font-medium bg-muted/30">
+                      <TableCell className="text-xs py-1.5">Total</TableCell>
+                      <TableCell className="text-xs py-1.5 text-muted-foreground">{previewPieces.pieces.reduce((s, p) => s + p.quantity, 0)} cuts</TableCell>
+                      <TableCell className="text-xs py-1.5 text-right font-mono">{previewPieces.pieces.reduce((s, p) => s + p.length * p.quantity, 0).toLocaleString()}</TableCell>
+                      <TableCell className="text-xs py-1.5 text-right">—</TableCell>
+                    </TableRow>
+                  )}
                 </TableBody>
               </Table>
             </div>
           </div>
 
-          {/* Error */}
           {saveError && (
-            <div className="flex items-center gap-2 text-sm text-destructive">
-              <HugeiconsIcon icon={AlertCircleIcon} size={14} />
+            <div className="flex items-center gap-2 text-xs text-destructive shrink-0">
+              <HugeiconsIcon icon={AlertCircleIcon} size={13} />
               <span>{saveError}</span>
             </div>
           )}
         </div>
 
-        <DialogFooter className="gap-2">
+        <DialogFooter className="gap-2 shrink-0">
           {isBuiltin ? (
             <>
-              <Button variant="outline" onClick={handleDuplicate} disabled={duplicateMutation.isPending}>
-                <HugeiconsIcon icon={Copy01Icon} size={14} className="mr-1.5" />
+              <Button variant="outline" onClick={handleDuplicate} disabled={duplicateMutation.isPending} className="gap-1.5">
+                <HugeiconsIcon icon={Copy01Icon} size={14} />
                 Duplicate
               </Button>
               <Button variant="ghost" onClick={onClose}>Close</Button>
@@ -722,8 +857,9 @@ function TemplateEditor({
               <Button
                 onClick={handleSave}
                 disabled={createMutation.isPending || updateMutation.isPending || hasErrors}
+                className="gap-1.5"
               >
-                <HugeiconsIcon icon={CheckmarkCircle01Icon} size={14} className="mr-1.5" />
+                <HugeiconsIcon icon={CheckmarkCircle01Icon} size={14} />
                 {isCreating ? "Create" : "Save"}
               </Button>
             </>

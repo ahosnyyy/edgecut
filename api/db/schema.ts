@@ -25,6 +25,21 @@ export const projects = sqliteTable("projects", {
   floors: integer("floors").notNull().default(1),
   apartmentsPerFloor: integer("apartments_per_floor").notNull().default(1),
   apartmentLabels: text("apartment_labels").notNull().default("[]"),
+  // Optimizer settings
+  measurementSystem: text("measurement_system", {
+    enum: ["metric", "imperial"],
+  })
+    .notNull()
+    .default("metric"),
+  unit: text("unit").notNull().default("cm"),
+  kerfWidth: real("kerf_width").notNull().default(5),
+  pricePerBar: real("price_per_bar").notNull().default(0),
+  optimizationStrategy: text("optimization_strategy", {
+    enum: ["balanced", "maximize_large_bars"],
+  })
+    .notNull()
+    .default("maximize_large_bars"),
+  profileSystem: text("profile_system").notNull().default('["manazil"]'),
   createdAt: integer("created_at").notNull(),
   updatedAt: integer("updated_at").notNull(),
 });
@@ -208,6 +223,18 @@ export const projectOpeningSizes = sqliteTable("project_opening_sizes", {
   height: real("height").notNull(),
 });
 
+// ─── Profile Systems (defines cutting constants per manufacturer/series) ─────
+
+export const profileSystems = sqliteTable("profile_systems", {
+  id: text("id").primaryKey(),
+  name: text("name").notNull(),
+  key: text("key").notNull().unique(),
+  constants: text("constants").notNull(),
+  defaultPieces: text("default_pieces"),
+  createdAt: integer("created_at").notNull(),
+  updatedAt: integer("updated_at").notNull(),
+});
+
 // ─── Templates ───────────────────────────────────────────────────────────────
 
 export const templates = sqliteTable("templates", {
@@ -215,6 +242,7 @@ export const templates = sqliteTable("templates", {
   name: text("name").notNull(),
   type: text("type", { enum: ["window", "door"] }).notNull(),
   category: text("category").notNull(),
+  profileSystemId: text("profile_system_id"),
   isBuiltin: integer("is_builtin", { mode: "boolean" })
     .notNull()
     .default(false),
@@ -251,18 +279,22 @@ export const templatePieces = sqliteTable("template_pieces", {
   sortOrder: integer("sort_order").notNull().default(0),
 });
 
-// ─── Stock Defaults (global, reusable across projects) ───────────────────────
+// ─── Stock Catalog (global, reusable across projects) ────────────────────────
 
-export const stockDefaults = sqliteTable("stock_defaults", {
+export const stockCatalog = sqliteTable("stock_catalog", {
   id: text("id").primaryKey(),
+  profileSystem: text("profile_system", {
+    enum: ["manazil", "premier"],
+  })
+    .notNull()
+    .default("manazil"),
   profileType: text("profile_type").notNull(),
   color: text("color").notNull(),
   length: real("length").notNull(),
   quantity: integer("quantity").notNull().default(-1),
-  isRemnant: integer("is_remnant", { mode: "boolean" })
-    .notNull()
-    .default(false),
   label: text("label"),
+  reservedQty: integer("reserved_qty").notNull().default(0),
+  usedQty: integer("used_qty").notNull().default(0),
 });
 
 // ─── Stock (per-project overrides + remnants) ────────────────────────────────
@@ -272,14 +304,15 @@ export const stock = sqliteTable("stock", {
   projectId: text("project_id")
     .notNull()
     .references(() => projects.id, { onDelete: "cascade" }),
+  profileSystem: text("profile_system"),
   profileType: text("profile_type").notNull(),
   color: text("color").notNull(),
-  length: real("length").notNull(),
+  length: real("length"),
+  label: text("label"),
   quantity: integer("quantity").notNull().default(-1),
   isRemnant: integer("is_remnant", { mode: "boolean" })
     .notNull()
     .default(false),
-  label: text("label"),
   sourceDefaultId: text("source_default_id"),
 });
 

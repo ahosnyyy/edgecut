@@ -6,6 +6,7 @@ export interface Template {
   name: string;
   type: "window" | "door";
   category: string;
+  profileSystemId: string | null;
   isBuiltin: boolean;
   createdAt: number;
   updatedAt: number;
@@ -56,7 +57,7 @@ export function useCreateTemplate() {
     mutationFn: (data: {
       name: string;
       type: "window" | "door";
-      category: string;
+      profileSystemId?: string | null;
       variables?: { name: string; label: string; defaultValue: number }[];
       pieces?: {
         label: string;
@@ -84,6 +85,7 @@ export function useUpdateTemplate() {
         name?: string;
         type?: "window" | "door";
         category?: string;
+        profileSystemId?: string | null;
         variables?: { name: string; label: string; defaultValue: number }[];
         pieces?: {
           label: string;

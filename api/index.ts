@@ -5,6 +5,8 @@ import { authRoutes } from "./routes/auth.js";
 import { templatesRoutes } from "./routes/templates.js";
 import { apartmentTemplateRoutes } from "./routes/apartmentTemplates.js";
 import { projectRoutes } from "./routes/projects.js";
+import { stockCatalogRoutes } from "./routes/stockCatalog.js";
+import { profileSystemRoutes } from "./routes/profileSystems.js";
 import { apiAuthMiddleware } from "./middleware/auth.js";
 
 export interface Env {
@@ -37,6 +39,8 @@ protectedApi.use("*", apiAuthMiddleware);
 protectedApi.route("/templates", templatesRoutes);
 protectedApi.route("/apartment-templates", apartmentTemplateRoutes);
 protectedApi.route("/projects", projectRoutes);
+protectedApi.route("/stock-catalog", stockCatalogRoutes);
+protectedApi.route("/profile-systems", profileSystemRoutes);
 
 app.route("/api", protectedApi);
 

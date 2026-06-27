@@ -5,6 +5,8 @@ export interface ApartmentTemplate {
   id: string;
   name: string;
   description: string | null;
+  openingCount: number;
+  profileSystemKeys: string | null;
   createdAt: number;
   updatedAt: number;
 }

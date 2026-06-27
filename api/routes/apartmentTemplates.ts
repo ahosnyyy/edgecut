@@ -1,10 +1,11 @@
 import { Hono } from "hono";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { getDb } from "../db/client.js";
 import {
   apartmentTemplates,
   apartmentTemplateOpenings,
   templates,
+  profileSystems,
 } from "../db/schema.js";
 import type { Env } from "../index.js";
 
@@ -19,7 +20,15 @@ function generateId(): string {
 apartmentTemplateRoutes.get("/", async (c) => {
   const db = getDb(c.env);
   const rows = await db
-    .select()
+    .select({
+      id: apartmentTemplates.id,
+      name: apartmentTemplates.name,
+      description: apartmentTemplates.description,
+      createdAt: apartmentTemplates.createdAt,
+      updatedAt: apartmentTemplates.updatedAt,
+      openingCount: sql<number>`(SELECT COUNT(*) FROM apartment_template_openings ato WHERE ato.apartment_template_id = ${sql.raw('"apartment_templates"."id"')})`.as("opening_count"),
+      profileSystemKeys: sql<string | null>`(SELECT GROUP_CONCAT(DISTINCT ps.key) FROM apartment_template_openings ato JOIN templates t ON t.id = ato.piece_template_id JOIN profile_systems ps ON ps.id = t.profile_system_id WHERE ato.apartment_template_id = ${sql.raw('"apartment_templates"."id"')})`.as("profile_system_keys"),
+    })
     .from(apartmentTemplates)
     .orderBy(apartmentTemplates.name);
   return c.json(rows);

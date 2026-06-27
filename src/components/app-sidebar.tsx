@@ -23,8 +23,10 @@ import { HugeiconsIcon } from "@hugeicons/react"
 import {
   ScissorIcon,
   FolderIcon,
-  LayoutGridIcon,
+  Home13Icon,
   RulerIcon,
+  PackageIcon,
+  Settings02Icon,
 } from "@hugeicons/core-free-icons"
 import { useProjects } from "@/hooks/useProjects"
 
@@ -44,16 +46,29 @@ const toolsNav: NavItem[] = [
   },
 ]
 
-const libraryNav: NavItem[] = [
+const catalogNav: NavItem[] = [
   {
     title: "Apartment Types",
     url: "/apartment-templates",
-    icon: <HugeiconsIcon icon={LayoutGridIcon} strokeWidth={2} className="size-4" />,
+    icon: <HugeiconsIcon icon={Home13Icon} strokeWidth={2} className="size-4" />,
   },
   {
     title: "Piece Templates",
-    url: "/templates",
+    url: "/piece-templates",
     icon: <HugeiconsIcon icon={RulerIcon} strokeWidth={2} className="size-4" />,
+  },
+  {
+    title: "Profile Systems",
+    url: "/profile-systems",
+    icon: <HugeiconsIcon icon={Settings02Icon} strokeWidth={2} className="size-4" />,
+  },
+]
+
+const inventoryNav: NavItem[] = [
+  {
+    title: "Stock Catalog",
+    url: "/stock-catalog",
+    icon: <HugeiconsIcon icon={PackageIcon} strokeWidth={2} className="size-4" />,
   },
 ]
 
@@ -97,7 +112,11 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
         <div className="hidden group-data-[collapsible=icon]:flex justify-center px-3">
           <SidebarSeparator className="w-8" />
         </div>
-        <NavGroup label="Library" items={libraryNav} />
+        <NavGroup label="Catalog" items={catalogNav} />
+        <div className="hidden group-data-[collapsible=icon]:flex justify-center px-3">
+          <SidebarSeparator className="w-8" />
+        </div>
+        <NavGroup label="Inventory" items={inventoryNav} />
         <div className="hidden group-data-[collapsible=icon]:flex justify-center px-3">
           <SidebarSeparator className="w-8" />
         </div>

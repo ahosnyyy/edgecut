@@ -12,6 +12,13 @@ export interface Project {
   apartmentLabels: string;
   buildingCount: number;
   completedBuildings: number;
+  // Optimizer settings
+  measurementSystem: "metric" | "imperial";
+  unit: string;
+  kerfWidth: number;
+  pricePerBar: number;
+  optimizationStrategy: "balanced" | "maximize_large_bars";
+  profileSystem: string[];
   createdAt: number;
   updatedAt: number;
 }
@@ -58,6 +65,7 @@ export interface OptimizationPool {
   pieceTemplateId: string;
   templateName: string;
   profileType: string;
+  profileSystemKey: string | null;
   pieces: { label: string; length: number; quantity: number; source: string }[];
 }
 
@@ -105,7 +113,7 @@ export function useUpdateProject() {
       data,
     }: {
       id: string;
-      data: Partial<Pick<Project, "name" | "client" | "notes" | "status">>;
+      data: Partial<Pick<Project, "name" | "client" | "notes" | "status" | "measurementSystem" | "unit" | "kerfWidth" | "pricePerBar" | "optimizationStrategy" | "profileSystem">>;
     }) =>
       apiFetch<{ id: string }>(`/api/projects/${id}`, {
         method: "PUT",
@@ -125,7 +133,10 @@ export function useDeleteProject() {
       apiFetch<{ deleted: boolean }>(`/api/projects/${id}`, {
         method: "DELETE",
       }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["projects"] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["projects"] });
+      qc.invalidateQueries({ queryKey: ["stock-catalog"] });
+    },
   });
 }
 
@@ -258,5 +269,169 @@ export function useProjectPieces(projectId: string | null) {
     queryKey: ["project-pieces", projectId],
     queryFn: () => apiFetch<ProjectPieces>(`/api/projects/${projectId}/pieces`),
     enabled: !!projectId,
+  });
+}
+
+// ─── Stock ───────────────────────────────────────────────────────────────────
+
+export interface StockEntry {
+  id: string;
+  projectId: string;
+  profileSystem: string | null;
+  profileType: string;
+  color: string;
+  length: number | null;
+  label: string | null;
+  quantity: number;
+  isRemnant: boolean;
+  sourceDefaultId: string | null;
+}
+
+export function useProjectStock(projectId: string | null) {
+  return useQuery<StockEntry[]>({
+    queryKey: ["project-stock", projectId],
+    queryFn: () => apiFetch<StockEntry[]>(`/api/projects/${projectId}/stock`),
+    enabled: !!projectId,
+  });
+}
+
+export function useAddStock() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      projectId,
+      data,
+    }: {
+      projectId: string;
+      data: Omit<StockEntry, "id" | "projectId" | "profileSystem"> & { profileSystem?: string | null };
+    }) =>
+      apiFetch<{ id: string }>(`/api/projects/${projectId}/stock`, {
+        method: "POST",
+        body: JSON.stringify(data),
+      }),
+    onSuccess: (_data, vars) => {
+      qc.invalidateQueries({ queryKey: ["project-stock", vars.projectId] });
+      qc.invalidateQueries({ queryKey: ["stock-catalog"] });
+    },
+  });
+}
+
+export function useUpdateStock() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      projectId,
+      stockId,
+      data,
+    }: {
+      projectId: string;
+      stockId: string;
+      data: Partial<Omit<StockEntry, "id" | "projectId">>;
+    }) =>
+      apiFetch<{ id: string }>(`/api/projects/${projectId}/stock/${stockId}`, {
+        method: "PUT",
+        body: JSON.stringify(data),
+      }),
+    onSuccess: (_data, vars) => {
+      qc.invalidateQueries({ queryKey: ["project-stock", vars.projectId] });
+      qc.invalidateQueries({ queryKey: ["stock-catalog"] });
+    },
+  });
+}
+
+export function useDeleteStock() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      projectId,
+      stockId,
+    }: {
+      projectId: string;
+      stockId: string;
+    }) =>
+      apiFetch<{ deleted: boolean }>(`/api/projects/${projectId}/stock/${stockId}`, {
+        method: "DELETE",
+      }),
+    onSuccess: (_data, vars) => {
+      qc.invalidateQueries({ queryKey: ["project-stock", vars.projectId] });
+      qc.invalidateQueries({ queryKey: ["stock-catalog"] });
+    },
+  });
+}
+
+// ─── Stock Catalog (global templates) ────────────────────────────────────────
+
+export interface StockCatalogEntry {
+  id: string;
+  profileSystem: "manazil" | "premier";
+  profileType: string;
+  color: string;
+  length: number;
+  quantity: number;
+  reservedQty: number;
+  usedQty: number;
+  label: string | null;
+}
+
+export function useStockCatalog(profileSystems?: string[]) {
+  const key = profileSystems?.slice().sort().join(",") ?? "all";
+  const queryKey = ["stock-catalog", key];
+
+  return useQuery<StockCatalogEntry[]>({
+    queryKey,
+    queryFn: () => {
+      if (!profileSystems || profileSystems.length === 0) {
+        return apiFetch<StockCatalogEntry[]>(`/api/stock-catalog`);
+      }
+      const params = profileSystems.map((s) => `profileSystem=${s}`).join("&");
+      return apiFetch<StockCatalogEntry[]>(`/api/stock-catalog?${params}`);
+    },
+  });
+}
+
+export function useAddStockCatalogEntry() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: Omit<StockCatalogEntry, "id" | "reservedQty" | "usedQty">) =>
+      apiFetch<{ id: string }>(`/api/stock-catalog`, {
+        method: "POST",
+        body: JSON.stringify(data),
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["stock-catalog"] });
+    },
+  });
+}
+
+export function useUpdateStockCatalogEntry() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      id,
+      data,
+    }: {
+      id: string;
+      data: Partial<Omit<StockCatalogEntry, "id">>;
+    }) =>
+      apiFetch<{ id: string }>(`/api/stock-catalog/${id}`, {
+        method: "PUT",
+        body: JSON.stringify(data),
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["stock-catalog"] });
+    },
+  });
+}
+
+export function useDeleteStockCatalogEntry() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) =>
+      apiFetch<{ deleted: boolean }>(`/api/stock-catalog/${id}`, {
+        method: "DELETE",
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["stock-catalog"] });
+    },
   });
 }

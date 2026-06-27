@@ -9,7 +9,14 @@ import {
   useSaveOpeningSizes,
   useDeleteProject,
   useProjectPieces,
+  useProjectStock,
+  useAddStock,
+  useUpdateStock,
+  useDeleteStock,
+  useStockCatalog,
   type Project,
+  type StockEntry,
+  type StockCatalogEntry,
 } from "../hooks/useProjects";
 import { apiFetch } from "../auth/apiClient";
 import { Button } from "../components/ui/button";
@@ -17,6 +24,17 @@ import { Card, CardAction, CardContent, CardDescription, CardFooter, CardHeader,
 import { Input } from "../components/ui/input";
 import { Label } from "../components/ui/label";
 import { Badge } from "../components/ui/badge";
+import {
+  Combobox,
+  ComboboxChips,
+  ComboboxChip,
+  ComboboxChipsInput,
+  ComboboxContent,
+  ComboboxEmpty,
+  ComboboxItem,
+  ComboboxList,
+  ComboboxValue,
+} from "../components/ui/combobox";
 import {
   Select,
   SelectContent,
@@ -51,16 +69,33 @@ import {
   AssignmentsIcon,
   RulerIcon,
   PuzzleIcon,
+  PackageIcon,
   Settings01Icon,
   InformationSquareIcon,
   ArrowLeft01Icon,
+  Recycle01Icon,
   ArrowRight01Icon,
   ArchiveArrowDownIcon,
+  Search01Icon,
+  FilterIcon,
+  AlertCircleIcon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "../components/ui/tabs";
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "../components/ui/empty";
 import { Tooltip, TooltipTrigger, TooltipContent } from "../components/ui/tooltip";
+
+const PROFILE_TYPE_LABELS: Record<string, string> = {
+  frame: "Frame",
+  sash: "Sash",
+  mullion: "Mullion",
+  bead: "Bead",
+  custom: "Custom",
+};
+
+function profileTypeLabel(id: string): string {
+  return PROFILE_TYPE_LABELS[id] ?? id.charAt(0).toUpperCase() + id.slice(1);
+}
 
 interface AssignmentGrid {
   [key: string]: string | null;
@@ -74,6 +109,21 @@ export default function ProjectBuilder() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { data: project, isLoading } = useProject(id ?? null);
+  const { data: stockEntries } = useProjectStock(id ?? null);
+  const { data: allStockCatalog } = useStockCatalog();
+  const lockedSystems = useMemo(() => {
+    if (!stockEntries) return new Set<string>();
+    const used = new Set<string>();
+    for (const entry of stockEntries) {
+      if (entry.profileSystem) {
+        used.add(entry.profileSystem);
+      } else if (entry.sourceDefaultId && allStockCatalog) {
+        const def = allStockCatalog.find((d) => d.id === entry.sourceDefaultId);
+        if (def) used.add(def.profileSystem);
+      }
+    }
+    return used;
+  }, [stockEntries, allStockCatalog]);
   const updateMutation = useUpdateProject();
   const deleteMutation = useDeleteProject();
   const createBuildingMutation = useCreateBuilding();
@@ -82,12 +132,22 @@ export default function ProjectBuilder() {
   const [client, setClient] = useState("");
   const [status, setStatus] = useState<Project["status"]>("draft");
   const [activeTab, setActiveTab] = useState("buildings");
+  const [measurementSystem, setMeasurementSystem] = useState<Project["measurementSystem"]>("metric");
+  const [unit, setUnit] = useState("cm");
+  const [kerfWidth, setKerfWidth] = useState(5);
+  const [optimizationStrategy, setOptimizationStrategy] = useState<Project["optimizationStrategy"]>("maximize_large_bars");
+  const [profileSystem, setProfileSystem] = useState<string[]>(["manazil"]);
 
   useEffect(() => {
     if (project) {
       setName(project.name);
       setClient(project.client ?? "");
       setStatus(project.status);
+      setMeasurementSystem(project.measurementSystem ?? "metric");
+      setUnit(project.unit ?? "cm");
+      setKerfWidth(project.kerfWidth ?? 5);
+      setOptimizationStrategy(project.optimizationStrategy ?? "maximize_large_bars");
+      setProfileSystem(project.profileSystem ?? ["manazil"]);
     }
   }, [project]);
 
@@ -95,7 +155,15 @@ export default function ProjectBuilder() {
     if (!id) return;
     await updateMutation.mutateAsync({
       id,
-      data: { name, client },
+      data: {
+        name,
+        client,
+        measurementSystem,
+        unit,
+        kerfWidth,
+        optimizationStrategy,
+        profileSystem,
+      },
     });
   };
 
@@ -139,6 +207,10 @@ export default function ProjectBuilder() {
                 <HugeiconsIcon icon={BuildingIcon} size={14} />
                 Buildings
               </TabsTrigger>
+              <TabsTrigger value="stock">
+                <HugeiconsIcon icon={PackageIcon} size={14} />
+                Stock
+              </TabsTrigger>
             </TabsList>
             <TabsList>
               <TabsTrigger value="settings">
@@ -147,9 +219,6 @@ export default function ProjectBuilder() {
               </TabsTrigger>
             </TabsList>
           </div>
-          <span className="text-xs text-muted-foreground shrink-0">
-            Created {new Date(project.createdAt).toLocaleDateString("en-GB")}
-          </span>
         </div>
 
         <ScrollArea className="flex-1">
@@ -160,6 +229,9 @@ export default function ProjectBuilder() {
                 buildings={buildings}
                 onCreateBuilding={createBuildingMutation.mutateAsync}
               />
+            </TabsContent>
+            <TabsContent value="stock">
+              <StockManagement projectId={id!} profileSystems={profileSystem} />
             </TabsContent>
             <TabsContent value="settings">
               <ProjectSettings
@@ -172,6 +244,17 @@ export default function ProjectBuilder() {
                 isSaving={updateMutation.isPending}
                 onDelete={handleDelete}
                 onArchive={handleArchive}
+                measurementSystem={measurementSystem}
+                unit={unit}
+                kerfWidth={kerfWidth}
+                optimizationStrategy={optimizationStrategy}
+                profileSystem={profileSystem}
+                lockedSystems={lockedSystems}
+                onMeasurementSystemChange={setMeasurementSystem}
+                onUnitChange={setUnit}
+                onKerfWidthChange={setKerfWidth}
+                onOptimizationStrategyChange={setOptimizationStrategy}
+                onProfileSystemChange={setProfileSystem}
               />
             </TabsContent>
           </div>
@@ -181,10 +264,579 @@ export default function ProjectBuilder() {
   );
 }
 
+// ─── Stock Tab ────────────────────────────────────────────────────────────────
+
+function StockManagement({ projectId, profileSystems }: { projectId: string; profileSystems: string[] }) {
+  const { data: stockEntries, isLoading } = useProjectStock(projectId);
+  const { data: stockCatalog } = useStockCatalog(profileSystems);
+  const addMutation = useAddStock();
+  const updateStockMutation = useUpdateStock();
+  const deleteMutation = useDeleteStock();
+
+  const [view, setView] = useState<"stock" | "remnants">("stock");
+  const [showCreate, setShowCreate] = useState(false);
+  const [newQty, setNewQty] = useState(-1);
+  const [newLength, setNewLength] = useState<number | "">("");
+  const [newLabel, setNewLabel] = useState("");
+  const [selectedDefaultId, setSelectedDefaultId] = useState<string | null>(null);
+  const [addMode, setAddMode] = useState<"catalog" | "custom">("catalog");
+  const [search, setSearch] = useState("");
+  const [filterType, setFilterType] = useState<string>("all");
+  const [filterSystem, setFilterSystem] = useState<string>("all");
+
+  const defaultsForView = useMemo(() => {
+    if (!stockCatalog || view === "remnants") return [];
+    return stockCatalog;
+  }, [stockCatalog, view]);
+
+  const effectiveMode = defaultsForView.length === 0 ? "custom" : addMode;
+
+  const getAvailableQty = (defaultId: string | null): number => {
+    if (!defaultId) return -1;
+    const def = stockCatalog?.find((d) => d.id === defaultId);
+    if (!def || def.quantity === -1) return -1;
+    return def.quantity - def.reservedQty - def.usedQty;
+  };
+
+  const [qtyError, setQtyError] = useState<string | null>(null);
+
+  const handlePickDefault = (defaultId: string) => {
+    const def = stockCatalog?.find((d) => d.id === defaultId);
+    if (!def) return;
+    setSelectedDefaultId(defaultId);
+    setNewQty(def.quantity);
+    setNewLength(def.length);
+    setNewLabel("");
+  };
+
+  const filtered = useMemo(() => {
+    if (!stockEntries) return [];
+    let result = stockEntries.filter((s) => s.isRemnant === (view === "remnants"));
+    if (filterSystem !== "all") {
+      result = result.filter((s) => {
+        const def = s.sourceDefaultId ? stockCatalog?.find((d) => d.id === s.sourceDefaultId) : null;
+        return (s.profileSystem ?? def?.profileSystem) === filterSystem;
+      });
+    }
+    if (filterType !== "all") {
+      result = result.filter((s) => {
+        const def = s.sourceDefaultId ? stockCatalog?.find((d) => d.id === s.sourceDefaultId) : null;
+        return def?.profileType === filterType;
+      });
+    }
+    if (search.trim()) {
+      const q = search.toLowerCase();
+      result = result.filter((s) => {
+        const def = s.sourceDefaultId ? stockCatalog?.find((d) => d.id === s.sourceDefaultId) : null;
+        return (
+          (def?.label ?? "").toLowerCase().includes(q) ||
+          (def?.profileType ?? "").toLowerCase().includes(q)
+        );
+      });
+    }
+    return result;
+  }, [stockEntries, view, search, filterType, filterSystem, stockCatalog]);
+
+  const handleAdd = () => {
+    const isRemnant = view === "remnants";
+    const qty = isRemnant ? (newQty === -1 ? 1 : newQty) : newQty;
+
+    // Require label for custom entries
+    if (effectiveMode === "custom" && !newLabel.trim()) {
+      setQtyError("Label is required for custom entries.");
+      return;
+    }
+
+    // Require length for custom entries (remnants or manual stock)
+    if (effectiveMode === "custom" && (newLength === "" || newLength <= 0)) {
+      setQtyError("Length is required.");
+      return;
+    }
+
+    // Require catalog selection in catalog mode
+    if (effectiveMode === "catalog" && defaultsForView.length > 0 && !selectedDefaultId) {
+      setQtyError("Please pick a catalog entry or switch to Custom.");
+      return;
+    }
+
+    // Check available inventory on the linked default
+    if (selectedDefaultId && qty > 0) {
+      const available = getAvailableQty(selectedDefaultId);
+      if (available >= 0 && qty > available) {
+        setQtyError(
+          `Only ${available} available. Cannot add ${qty}.`
+        );
+        return;
+      }
+    }
+    setQtyError(null);
+
+    // Check if an entry with the same sourceDefaultId already exists
+    const existing = filtered.find(
+      (s) => s.sourceDefaultId === (selectedDefaultId ?? null) && s.isRemnant === isRemnant,
+    );
+
+    if (existing && qty > 0) {
+      // Bump quantity on existing entry
+      const newQty = (existing.quantity === -1 ? 0 : existing.quantity) + qty;
+      updateStockMutation.mutate({
+        projectId,
+        stockId: existing.id,
+        data: { quantity: newQty },
+      });
+    } else {
+      const def = selectedDefaultId ? stockCatalog?.find((d) => d.id === selectedDefaultId) : null;
+      addMutation.mutate({
+        projectId,
+        data: {
+          profileType: def?.profileType ?? "",
+          color: def?.color ?? "#000000",
+          length: newLength === "" ? (def?.length ?? null) : newLength,
+          label: effectiveMode === "custom" ? (newLabel.trim() || null) : (def?.label ?? null),
+          quantity: qty,
+          isRemnant,
+          sourceDefaultId: selectedDefaultId,
+        },
+      });
+    }
+    setShowCreate(false);
+    resetForm();
+  };
+
+  const handleDelete = (id: string) => {
+    deleteMutation.mutate({ projectId, stockId: id });
+  };
+
+  const resetForm = () => {
+    setSelectedDefaultId(null);
+    setNewQty(-1);
+    setNewLength("");
+    setNewLabel("");
+    setQtyError(null);
+    setAddMode("catalog");
+  };
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <p className="text-sm text-muted-foreground">Loading stock...</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex flex-col gap-3">
+      <div className="flex items-center justify-between gap-2">
+        <div className="inline-flex items-center gap-0.5 rounded-md bg-muted p-0.5 w-fit">
+          <button
+            className={`px-3 py-1 text-xs font-medium rounded-md transition-all ${
+              view === "stock"
+                ? "bg-background text-foreground shadow-sm"
+                : "text-muted-foreground hover:text-foreground"
+            }`}
+            onClick={() => setView("stock")}
+          >
+            Stock
+          </button>
+          <button
+            className={`px-3 py-1 text-xs font-medium rounded-md transition-all ${
+              view === "remnants"
+                ? "bg-background text-foreground shadow-sm"
+                : "text-muted-foreground hover:text-foreground"
+            }`}
+            onClick={() => setView("remnants")}
+          >
+            Remnants
+          </button>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <div className="relative">
+            <HugeiconsIcon
+              icon={Search01Icon}
+              size={14}
+              className="absolute left-2 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none"
+            />
+            <Input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search stock..."
+              className="w-44 pl-7 h-8 text-xs"
+            />
+          </div>
+          <Select
+            value={filterSystem}
+            onValueChange={(v) => setFilterSystem(v ?? "all")}
+          >
+            <SelectTrigger className="w-28 h-8 text-xs gap-1.5">
+              <HugeiconsIcon icon={FilterIcon} size={14} className="text-muted-foreground" />
+              <SelectValue>
+                {filterSystem === "all" ? "All Systems" : filterSystem.charAt(0).toUpperCase() + filterSystem.slice(1)}
+              </SelectValue>
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Systems</SelectItem>
+              {profileSystems.map((s) => (
+                <SelectItem key={s} value={s}>{s.charAt(0).toUpperCase() + s.slice(1)}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Select
+            value={filterType}
+            onValueChange={(v) => setFilterType(v ?? "all")}
+          >
+            <SelectTrigger className="w-32 h-8 text-xs gap-1.5">
+              <HugeiconsIcon icon={FilterIcon} size={14} className="text-muted-foreground" />
+              <SelectValue>
+                {filterType === "all" ? "All Types" : profileTypeLabel(filterType)}
+              </SelectValue>
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Types</SelectItem>
+              {Object.entries(PROFILE_TYPE_LABELS).map(([id, label]) => (
+                <SelectItem key={id} value={id}>{label}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+
+      {filtered.length === 0 ? (
+        (search.trim() || filterType !== "all" || filterSystem !== "all") ? (
+          <Empty>
+            <EmptyHeader>
+              <EmptyMedia variant="icon">
+                <HugeiconsIcon icon={FilterIcon} />
+              </EmptyMedia>
+              <EmptyTitle>No {view === "remnants" ? "remnants" : "stock"} match your filters</EmptyTitle>
+              <EmptyDescription>
+                {search.trim()
+                  ? `No results for "${search.trim()}".`
+                  : `No ${view === "remnants" ? "remnants" : "stock"} with the selected filters.`}
+              </EmptyDescription>
+            </EmptyHeader>
+            <EmptyContent>
+              <Button variant="outline" size="sm" onClick={() => { setSearch(""); setFilterType("all"); setFilterSystem("all"); }}>
+                Clear filters
+              </Button>
+            </EmptyContent>
+          </Empty>
+        ) : (
+          <Empty>
+            <EmptyHeader>
+              <EmptyMedia variant="icon">
+                <HugeiconsIcon icon={view === "remnants" ? Recycle01Icon : PackageIcon} />
+              </EmptyMedia>
+              <EmptyTitle>No {view === "remnants" ? "remnants" : "stock"} yet</EmptyTitle>
+              <EmptyDescription>
+                {view === "remnants"
+                  ? "Add leftover pieces from previous cuts."
+                  : "Add stock bars available for cutting."}
+              </EmptyDescription>
+            </EmptyHeader>
+            <EmptyContent>
+              <Button className="gap-1.5" onClick={() => setShowCreate(true)}>
+                <HugeiconsIcon icon={Add01Icon} size={14} strokeWidth={2} />
+                Add {view === "remnants" ? "Remnant" : "Stock"}
+              </Button>
+            </EmptyContent>
+          </Empty>
+        )
+      ) : (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+          <Card
+            size="sm"
+            className="cursor-pointer border border-dashed border-muted-foreground/30 ring-0 bg-muted/10 hover:border-primary/40 hover:bg-muted/20 transition-colors"
+            onClick={() => setShowCreate(true)}
+          >
+            <div className="flex flex-col items-center justify-center gap-1.5 py-3">
+              <HugeiconsIcon icon={view === "remnants" ? Recycle01Icon : PackageIcon} size={20} className="text-muted-foreground" />
+              <span className="text-sm text-muted-foreground">Add {view === "remnants" ? "Remnant" : "Stock"}</span>
+            </div>
+          </Card>
+          {filtered.map((entry) => (
+            <Card
+              key={entry.id}
+              size="sm"
+              className={`pb-0 transition-colors ${entry.isRemnant ? "border-dashed" : ""} group`}
+            >
+              <CardHeader className="pb-1">
+                <CardAction>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-6 w-6 p-0 text-muted-foreground hover:text-destructive opacity-0 group-hover:opacity-100"
+                    onClick={() => handleDelete(entry.id)}
+                  >
+                    <HugeiconsIcon icon={Delete02Icon} size={13} />
+                  </Button>
+                </CardAction>
+                <CardTitle className="text-sm truncate flex items-center gap-1.5">
+                  {entry.isRemnant && (
+                    <HugeiconsIcon icon={Recycle01Icon} size={12} className="text-purple-600 dark:text-purple-400 shrink-0" />
+                  )}
+                  {(() => {
+                    const def = entry.sourceDefaultId
+                      ? stockCatalog?.find((d) => d.id === entry.sourceDefaultId)
+                      : null;
+                    return def?.label ?? entry.label ?? (entry.isRemnant ? "Remnant" : "Stock");
+                  })()}
+                </CardTitle>
+                <CardDescription className="text-xs truncate flex items-center gap-1.5">
+                  {(() => {
+                    const def = entry.sourceDefaultId
+                      ? stockCatalog?.find((d) => d.id === entry.sourceDefaultId)
+                      : null;
+                    const sysKey = entry.profileSystem ?? def?.profileSystem ?? null;
+                    return (
+                      <>
+                        {sysKey && (
+                          <Badge
+                            variant="secondary"
+                            className={
+                              "text-[9px] px-1 py-0 h-4 capitalize shrink-0 " +
+                              (sysKey === "manazil"
+                                ? "bg-blue-500/15 text-blue-700 dark:text-blue-400"
+                                : "bg-orange-500/15 text-orange-700 dark:text-orange-400")
+                            }
+                          >
+                            {sysKey}
+                          </Badge>
+                        )}
+                        <span className="truncate">
+                          {def
+                            ? ` · ${profileTypeLabel(def.profileType)} · ${entry.length ?? def.length} mm`
+                            : entry.length != null
+                              ? ` · ${profileTypeLabel(entry.profileType)} · ${entry.length} mm`
+                              : "Custom"}
+                        </span>
+                      </>
+                    );
+                  })()}
+                </CardDescription>
+              </CardHeader>
+              <CardFooter className="bg-muted/50 py-2.5">
+                <div className="flex items-center justify-between w-full gap-2 text-[10px] text-muted-foreground">
+                  <div className="flex items-center gap-2">
+                    <span>{entry.quantity === -1 ? "∞ unlimited" : `${entry.quantity} bars`}</span>
+                    {entry.isRemnant && (
+                      <>
+                        <Separator orientation="vertical" className="my-0.5" />
+                        <span>Remnant</span>
+                      </>
+                    )}
+                  </div>
+                  {entry.quantity !== -1 && (
+                    <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <input
+                        type="number"
+                        min={1}
+                        defaultValue={10}
+                        className="w-12 h-5 px-1 text-[10px] text-center rounded border bg-background"
+                        onClick={(e) => e.stopPropagation()}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") {
+                            const val = parseInt((e.target as HTMLInputElement).value, 10);
+                            if (!isNaN(val) && val !== 0) {
+                              const available = getAvailableQty(entry.sourceDefaultId);
+                              if (available >= 0 && val > 0 && val > available) {
+                                return;
+                              }
+                              updateStockMutation.mutate({
+                                projectId,
+                                stockId: entry.id,
+                                data: { quantity: Math.max(0, entry.quantity + val) },
+                              });
+                              (e.target as HTMLInputElement).value = "10";
+                            }
+                          }
+                        }}
+                      />
+                      <button
+                        className="flex items-center justify-center h-5 w-5 rounded border bg-background hover:bg-accent transition-colors"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          const input = (e.currentTarget.previousSibling as HTMLInputElement);
+                          const val = parseInt(input.value, 10);
+                          if (!isNaN(val) && val !== 0) {
+                            const available = getAvailableQty(entry.sourceDefaultId);
+                            if (available >= 0 && val > 0 && val > available) {
+                              return;
+                            }
+                            updateStockMutation.mutate({
+                              projectId,
+                              stockId: entry.id,
+                              data: { quantity: Math.max(0, entry.quantity + val) },
+                            });
+                            input.value = "10";
+                          }
+                        }}
+                      >
+                        <HugeiconsIcon icon={Add01Icon} size={10} />
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </CardFooter>
+            </Card>
+          ))}
+        </div>
+      )}
+
+      {showCreate && (
+        <Dialog open={true} onOpenChange={(open) => { if (!open) { setShowCreate(false); resetForm(); } }}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle>New {view === "remnants" ? "Remnant" : "Stock"}</DialogTitle>
+            </DialogHeader>
+            <div className="flex flex-col gap-3">
+              {defaultsForView.length > 0 && (
+                <div className="grid grid-cols-2 gap-0 rounded-md border overflow-hidden">
+                  <button
+                    type="button"
+                    className={`px-3 py-1.5 text-xs font-medium transition-colors ${
+                      effectiveMode === "catalog"
+                        ? "bg-primary text-primary-foreground"
+                        : "bg-background hover:bg-muted"
+                    }`}
+                    onClick={() => { setAddMode("catalog"); setSelectedDefaultId(null); setNewLabel(""); }}
+                  >
+                    From Catalog
+                  </button>
+                  <button
+                    type="button"
+                    className={`px-3 py-1.5 text-xs font-medium transition-colors ${
+                      effectiveMode === "custom"
+                        ? "bg-primary text-primary-foreground"
+                        : "bg-background hover:bg-muted"
+                    }`}
+                    onClick={() => { setAddMode("custom"); setSelectedDefaultId(null); setNewLength(""); }}
+                  >
+                    Custom
+                  </button>
+                </div>
+              )}
+
+              {effectiveMode === "catalog" && defaultsForView.length > 0 && (
+                <div className="flex flex-col gap-1.5">
+                  <Label htmlFor="ns-default">Pick from catalog ({profileSystems.join(", ")})</Label>
+                  <Select
+                    value={selectedDefaultId ?? ""}
+                    onValueChange={(v) => v && handlePickDefault(v)}
+                  >
+                    <SelectTrigger className="h-8 w-full">
+                      <SelectValue placeholder="Choose a catalog entry...">
+                        {selectedDefaultId
+                          ? stockCatalog?.find((d) => d.id === selectedDefaultId)?.label ?? "Custom"
+                          : "Choose a catalog entry..."}
+                      </SelectValue>
+                    </SelectTrigger>
+                    <SelectContent>
+                      {defaultsForView.map((d) => {
+                        const avail = d.quantity === -1 ? -1 : d.quantity - d.reservedQty - d.usedQty;
+                        return (
+                          <SelectItem key={d.id} value={d.id}>
+                            <span className="flex items-center gap-2">
+                              {d.label ?? `${d.profileType} ${d.length}mm`}
+                              {avail >= 0 && (
+                                <span className={
+                                  "text-[10px] " +
+                                  (avail <= 0
+                                    ? "text-red-500"
+                                    : avail <= Math.max(5, d.quantity * 0.15)
+                                      ? "text-amber-500"
+                                      : "text-muted-foreground")
+                                }>
+                                  ({avail} avail)
+                                </span>
+                              )}
+                            </span>
+                          </SelectItem>
+                        );
+                      })}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+
+              {effectiveMode === "custom" && (
+                <div className="flex flex-col gap-1.5">
+                  <Label htmlFor="ns-label">Label <span className="text-red-500">*</span></Label>
+                  <Input
+                    id="ns-label"
+                    value={newLabel}
+                    onChange={(e) => setNewLabel(e.target.value)}
+                    placeholder="e.g. Leftover from job X"
+                  />
+                </div>
+              )}
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="flex flex-col gap-1.5">
+                  <Label htmlFor="ns-length">
+                    Length (mm)
+                    {effectiveMode === "catalog" ? (
+                      <span className="text-[10px] text-muted-foreground ml-1">(from catalog)</span>
+                    ) : (
+                      <span className="text-red-500 ml-0.5">*</span>
+                    )}
+                  </Label>
+                  <Input
+                    id="ns-length"
+                    type="number"
+                    min={1}
+                    value={newLength}
+                    disabled={effectiveMode === "catalog"}
+                    onChange={(e) => {
+                      const val = parseFloat(e.target.value);
+                      setNewLength(isNaN(val) ? "" : val);
+                    }}
+                    placeholder="e.g. 3500"
+                  />
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <Label htmlFor="ns-qty">Quantity</Label>
+                  <Input
+                    id="ns-qty"
+                    type="text"
+                    value={newQty === -1 ? "∞" : String(newQty)}
+                    onChange={(e) => {
+                      const raw = e.target.value.trim();
+                      if (raw === "∞" || raw === "" || raw.toLowerCase() === "inf") {
+                        setNewQty(-1);
+                      } else {
+                        const val = parseInt(raw, 10);
+                        if (!isNaN(val) && val >= 0) setNewQty(val);
+                      }
+                    }}
+                    placeholder="∞"
+                  />
+                </div>
+              </div>
+              {qtyError && (
+                <p className="text-xs text-red-500">{qtyError}</p>
+              )}
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => { setShowCreate(false); resetForm(); }}>Cancel</Button>
+              <Button onClick={handleAdd} disabled={addMutation.isPending} className="gap-1.5">
+                <HugeiconsIcon icon={Add01Icon} size={14} />
+                {addMutation.isPending ? "Adding..." : `Add ${view === "remnants" ? "Remnant" : "Stock"}`}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
+    </div>
+  );
+}
+
 // ─── Settings Tab ─────────────────────────────────────────────────────────────
 
 function ProjectSettings({
   name, client, status, onNameChange, onClientChange, onSave, isSaving, onDelete, onArchive,
+  measurementSystem, unit, kerfWidth, optimizationStrategy, profileSystem, lockedSystems,
+  onMeasurementSystemChange, onUnitChange, onKerfWidthChange, onOptimizationStrategyChange, onProfileSystemChange,
 }: {
   name: string;
   client: string;
@@ -195,54 +847,193 @@ function ProjectSettings({
   isSaving: boolean;
   onDelete: () => void;
   onArchive: () => void;
+  measurementSystem: Project["measurementSystem"];
+  unit: string;
+  kerfWidth: number;
+  optimizationStrategy: Project["optimizationStrategy"];
+  profileSystem: string[];
+  lockedSystems: Set<string>;
+  onMeasurementSystemChange: (v: Project["measurementSystem"]) => void;
+  onUnitChange: (v: string) => void;
+  onKerfWidthChange: (v: number) => void;
+  onOptimizationStrategyChange: (v: Project["optimizationStrategy"]) => void;
+  onProfileSystemChange: (v: string[]) => void;
 }) {
   return (
-    <div className="flex flex-col gap-4 max-w-2xl">
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-sm">General</CardTitle>
-          <CardDescription className="text-xs">Basic project information and status.</CardDescription>
-        </CardHeader>
-        <CardContent className="flex flex-col gap-4">
-          <div className="grid grid-cols-[120px_1fr] items-center gap-3">
-            <Label htmlFor="p-name" className="text-xs text-muted-foreground">Name</Label>
-            <Input id="p-name" value={name} onChange={(e) => onNameChange(e.target.value)} className="h-8 text-xs" />
-          </div>
-          <Separator />
-          <div className="grid grid-cols-[120px_1fr] items-center gap-3">
-            <Label htmlFor="p-client" className="text-xs text-muted-foreground">Client</Label>
-            <Input id="p-client" value={client} onChange={(e) => onClientChange(e.target.value)} className="h-8 text-xs" />
-          </div>
-          <Separator />
-          <div className="grid grid-cols-[120px_1fr] items-center gap-3">
-            <Label className="text-xs text-muted-foreground">Status</Label>
-            <div className="flex items-center gap-2">
-              <Badge
-                variant="secondary"
-                className={
-                  "text-[10px] " +
-                  (status === "active"
-                    ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400"
-                    : status === "completed"
-                      ? "bg-blue-500/15 text-blue-700 dark:text-blue-400"
-                      : status === "archived"
-                        ? "bg-zinc-500/15 text-zinc-600 dark:text-zinc-400"
-                        : "bg-amber-500/15 text-amber-700 dark:text-amber-400")
-                }
-              >
-                {status.charAt(0).toUpperCase() + status.slice(1)}
-              </Badge>
-              <span className="text-[10px] text-muted-foreground">Derived from building statuses</span>
+    <div className="flex flex-col gap-4">
+      <div className="flex items-stretch gap-4">
+        <Card className="flex-1">
+          <CardHeader>
+            <CardTitle className="text-sm">General</CardTitle>
+            <CardDescription className="text-xs">Basic project information and status.</CardDescription>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-4">
+            <div className="grid grid-cols-[80px_1fr] items-center gap-3">
+              <Label htmlFor="p-name" className="text-xs text-muted-foreground">Name</Label>
+              <Input id="p-name" value={name} onChange={(e) => onNameChange(e.target.value)} className="h-7 " />
             </div>
-          </div>
-          <div className="flex justify-end">
-            <Button onClick={onSave} disabled={isSaving} className="gap-1.5 w-36 justify-center">
-              <HugeiconsIcon icon={SaveIcon} size={14} />
-              {isSaving ? "Saving..." : "Save Changes"}
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
+            <Separator />
+            <div className="grid grid-cols-[80px_1fr] items-center gap-3">
+              <Label htmlFor="p-client" className="text-xs text-muted-foreground">Client</Label>
+              <Input id="p-client" value={client} onChange={(e) => onClientChange(e.target.value)} className="h-7 " />
+            </div>
+            <Separator />
+            <div className="grid grid-cols-[80px_1fr] items-center gap-3">
+              <Label className="text-xs text-muted-foreground">Status</Label>
+              <div className="flex items-center gap-2">
+                <Badge
+                  variant="secondary"
+                  className={
+                    "text-[10px] " +
+                    (status === "active"
+                      ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400"
+                      : status === "completed"
+                        ? "bg-blue-500/15 text-blue-700 dark:text-blue-400"
+                        : status === "archived"
+                          ? "bg-zinc-500/15 text-zinc-600 dark:text-zinc-400"
+                          : "bg-amber-500/15 text-amber-700 dark:text-amber-400")
+                  }
+                >
+                  {status.charAt(0).toUpperCase() + status.slice(1)}
+                </Badge>
+                <span className="text-[10px] text-muted-foreground">Derived from building statuses</span>
+              </div>
+            </div>
+            <Separator />
+            <div className="grid grid-cols-[80px_1fr] items-center gap-3">
+              <Label className="text-xs text-muted-foreground">Profile</Label>
+              <div className="flex flex-col gap-1">
+                <Combobox
+                  items={["manazil", "premier"]}
+                  multiple
+                  value={profileSystem}
+                  onValueChange={(v) => {
+                    const next = v as string[];
+                    const filtered = next.filter((s) => !lockedSystems.has(s) || profileSystem.includes(s));
+                    onProfileSystemChange(
+                      filtered.length === 0 ? profileSystem : Array.from(new Set(filtered))
+                    );
+                  }}
+                >
+                  <ComboboxChips>
+                    <ComboboxValue>
+                      {profileSystem.map((item) => (
+                        <ComboboxChip key={item} showRemove={!lockedSystems.has(item)}>
+                          {item.charAt(0).toUpperCase() + item.slice(1)}
+                        </ComboboxChip>
+                      ))}
+                    </ComboboxValue>
+                    <ComboboxChipsInput placeholder="Add profile system..." />
+                  </ComboboxChips>
+                  <ComboboxContent>
+                    <ComboboxEmpty>No systems found.</ComboboxEmpty>
+                    <ComboboxList>
+                      {(item) => (
+                        <ComboboxItem key={item} value={item}>
+                          {item.charAt(0).toUpperCase() + item.slice(1)}
+                        </ComboboxItem>
+                      )}
+                    </ComboboxList>
+                  </ComboboxContent>
+                </Combobox>
+                {lockedSystems.size > 0 && (
+                  <span className="text-[10px] text-muted-foreground">
+                    {Array.from(lockedSystems).map((s) => s.charAt(0).toUpperCase() + s.slice(1)).join(", ")} in use by stock entries.
+                  </span>
+                )}
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="flex-1">
+          <CardHeader>
+            <CardTitle className="text-sm">Optimization</CardTitle>
+            <CardDescription className="text-xs">Cutting optimizer settings for this project.</CardDescription>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-4">
+            <div className="grid grid-cols-[80px_1fr_50px_1fr] items-center gap-3">
+              <Label className="text-xs text-muted-foreground">Measure</Label>
+              <Select
+                value={measurementSystem}
+                onValueChange={(v) => {
+                  onMeasurementSystemChange(v as Project["measurementSystem"]);
+                  onUnitChange(v === "metric" ? "cm" : "in");
+                }}
+              >
+                <SelectTrigger className="h-7 text-xs w-full">
+                  <SelectValue>
+                    {measurementSystem === "metric" ? "Metric" : "Imperial"}
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="metric">Metric</SelectItem>
+                  <SelectItem value="imperial">Imperial</SelectItem>
+                </SelectContent>
+              </Select>
+              <Label className="text-xs text-muted-foreground">Unit</Label>
+              <Select value={unit} onValueChange={(v) => onUnitChange(v ?? "")}>
+                <SelectTrigger className="h-7 text-xs w-full">
+                  <SelectValue>{unit}</SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  {measurementSystem === "metric" ? (
+                    <>
+                      <SelectItem value="mm">mm</SelectItem>
+                      <SelectItem value="cm">cm</SelectItem>
+                      <SelectItem value="m">m</SelectItem>
+                    </>
+                  ) : (
+                    <>
+                      <SelectItem value="in">in</SelectItem>
+                      <SelectItem value="ft">ft</SelectItem>
+                    </>
+                  )}
+                </SelectContent>
+              </Select>
+            </div>
+            <Separator />
+            <div className="grid grid-cols-[80px_1fr] items-center gap-3">
+              <Label htmlFor="p-kerf" className="text-xs text-muted-foreground">Kerf Width</Label>
+              <div className="flex items-center gap-2">
+                <Input
+                  id="p-kerf"
+                  type="number"
+                  value={kerfWidth}
+                  onChange={(e) => onKerfWidthChange(parseFloat(e.target.value) || 0)}
+                  className="h-7  w-full"
+                />
+                <span className="text-xs text-muted-foreground shrink-0">mm</span>
+              </div>
+            </div>
+            <Separator />
+            <div className="grid grid-cols-[80px_1fr] items-center gap-3">
+              <Label className="text-xs text-muted-foreground">Goal</Label>
+              <Select
+                value={optimizationStrategy}
+                onValueChange={(v) => onOptimizationStrategyChange(v as Project["optimizationStrategy"])}
+              >
+                <SelectTrigger className="h-7 text-xs w-full">
+                  <SelectValue>
+                    {optimizationStrategy === "maximize_large_bars" ? "Maximize Large Bars" : "Balanced"}
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="maximize_large_bars">Maximize Large Bars</SelectItem>
+                  <SelectItem value="balanced">Balanced</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      <div className="flex justify-end">
+        <Button onClick={onSave} disabled={isSaving} className="gap-1.5 w-36 justify-center">
+          <HugeiconsIcon icon={SaveIcon} size={14} />
+          {isSaving ? "Saving..." : "Save Changes"}
+        </Button>
+      </div>
       <Card className="border-destructive/20">
         <CardHeader>
           <CardTitle className="text-sm text-destructive">Danger Zone</CardTitle>
@@ -281,11 +1072,12 @@ function ProjectSettings({
 // ─── Building Detail View ─────────────────────────────────────────────────────
 
 export function BuildingDetail({
-  building, projectId, aptTemplates, existingAssignments, existingSizes, aptTemplateNames, onNext, onPrev, hasNext, hasPrev, onUpdateBuilding, onDeleteBuilding, canDelete,
+  building, projectId, aptTemplates, projectProfileSystems, existingAssignments, existingSizes, aptTemplateNames, onNext, onPrev, hasNext, hasPrev, onUpdateBuilding, onDeleteBuilding, canDelete,
 }: {
   building: BuildingLike;
   projectId: string;
-  aptTemplates: { id: string; name: string }[];
+  aptTemplates: { id: string; name: string; profileSystemKeys?: string | null }[];
+  projectProfileSystems: string[];
   existingAssignments: { floor: number; apartmentIndex: number; apartmentTemplateId: string | null }[];
   existingSizes: { apartmentTemplateOpeningId: string; floor: number; apartmentIndex: number; width: number; height: number }[];
   aptTemplateNames: Record<string, string>;
@@ -325,15 +1117,13 @@ export function BuildingDetail({
               </TabsTrigger>
             </TabsList>
           </div>
-          <span className="text-xs text-muted-foreground">
-            Created {new Date(building.createdAt).toLocaleDateString("en-GB")}
-          </span>
         </div>
         <TabsContent value="assignments" className="mt-3">
           <FloorAssignments
             projectId={projectId}
             building={building}
             aptTemplates={aptTemplates}
+            projectProfileSystems={projectProfileSystems}
             existingAssignments={existingAssignments}
             onPrev={onPrev}
             onNext={onNext}
@@ -530,6 +1320,8 @@ function BuildingsManager({
   const [newFloors, setNewFloors] = useState(6);
   const [newApts, setNewApts] = useState(4);
   const [newLabels, setNewLabels] = useState<string[]>(["A", "B", "C", "D"]);
+  const [search, setSearch] = useState("");
+  const [filterStatus, setFilterStatus] = useState<string>("all");
 
   const updateNewLabel = (i: number, v: string) => {
     const arr = [...newLabels];
@@ -545,8 +1337,55 @@ function BuildingsManager({
     setNewName("");
   };
 
+  const filtered = useMemo(() => {
+    let result = buildings;
+    if (filterStatus !== "all") {
+      result = result.filter((b) => b.status === filterStatus);
+    }
+    if (search.trim()) {
+      const q = search.toLowerCase();
+      result = result.filter((b) => b.name.toLowerCase().includes(q));
+    }
+    return result;
+  }, [buildings, search, filterStatus]);
+
   return (
     <div className="flex flex-col gap-3">
+      {buildings.length > 0 && (
+        <div className="flex items-center justify-end gap-2">
+          <div className="relative">
+            <HugeiconsIcon
+              icon={Search01Icon}
+              size={14}
+              className="absolute left-2 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none"
+            />
+            <Input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search buildings..."
+              className="w-44 pl-7 h-8 text-xs"
+            />
+          </div>
+          <Select
+            value={filterStatus}
+            onValueChange={(v) => setFilterStatus(v ?? "all")}
+          >
+            <SelectTrigger className="w-32 h-8 text-xs gap-1.5">
+              <HugeiconsIcon icon={FilterIcon} size={14} className="text-muted-foreground" />
+              <SelectValue>
+                {filterStatus === "all" ? "All Status" : filterStatus.charAt(0).toUpperCase() + filterStatus.slice(1)}
+              </SelectValue>
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Status</SelectItem>
+              {buildingStatusOptions.map((opt) => (
+                <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      )}
+
       {buildings.length === 0 ? (
         <Empty>
           <EmptyHeader>
@@ -563,6 +1402,25 @@ function BuildingsManager({
             </Button>
           </EmptyContent>
         </Empty>
+      ) : filtered.length === 0 ? (
+        <Empty>
+          <EmptyHeader>
+            <EmptyMedia variant="icon">
+              <HugeiconsIcon icon={FilterIcon} />
+            </EmptyMedia>
+            <EmptyTitle>No buildings match your filters</EmptyTitle>
+            <EmptyDescription>
+              {search.trim()
+                ? `No results for "${search.trim()}".`
+                : `No buildings with status "${filterStatus}".`}
+            </EmptyDescription>
+          </EmptyHeader>
+          <EmptyContent>
+            <Button variant="outline" size="sm" onClick={() => { setSearch(""); setFilterStatus("all"); }}>
+              Clear filters
+            </Button>
+          </EmptyContent>
+        </Empty>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
           <Card
@@ -575,7 +1433,7 @@ function BuildingsManager({
               <span className="text-sm text-muted-foreground">Add Building</span>
             </div>
           </Card>
-          {buildings.map((b) => {
+          {filtered.map((b) => {
             return (
               <Card key={b.id} size="sm" className={`pb-0 cursor-pointer hover:border-primary/40 transition-colors${b.status === "archived" ? " opacity-50" : ""}`} onClick={() => navigate(`/projects/${projectId}/buildings/${b.id}`)}>
                 <CardHeader className="pb-1">
@@ -665,11 +1523,12 @@ function BuildingsManager({
 // ─── Floor Assignments Tab ─────────────────────────────────────────────────────────
 
 function FloorAssignments({
-  projectId, building, aptTemplates, existingAssignments, onPrev, onNext, hasPrev, hasNext,
+  projectId, building, aptTemplates, projectProfileSystems, existingAssignments, onPrev, onNext, hasPrev, hasNext,
 }: {
   projectId: string;
   building: BuildingLike;
-  aptTemplates: { id: string; name: string }[];
+  aptTemplates: { id: string; name: string; profileSystemKeys?: string | null }[];
+  projectProfileSystems: string[];
   existingAssignments: { floor: number; apartmentIndex: number; apartmentTemplateId: string | null }[];
   onPrev?: () => void;
   onNext?: () => void;
@@ -687,6 +1546,15 @@ function FloorAssignments({
     for (const t of aptTemplates) m[t.id] = t.name;
     return m;
   }, [aptTemplates]);
+
+  // Check if an apartment template uses profile systems not in the project's list
+  const getMismatchedSystems = (templateId: string | null): string[] => {
+    if (!templateId) return [];
+    const tpl = aptTemplates.find((t) => t.id === templateId);
+    if (!tpl?.profileSystemKeys) return [];
+    const keys = tpl.profileSystemKeys.split(",").map((k) => k.trim()).filter(Boolean);
+    return keys.filter((k) => !projectProfileSystems.includes(k));
+  };
 
   const [grid, setGrid] = useState<AssignmentGrid>({});
 
@@ -805,11 +1673,31 @@ function FloorAssignments({
                         </SelectValue>
                       </SelectTrigger>
                       <SelectContent>
-                        {aptTemplates.map((t) => (
-                          <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
-                        ))}
+                        {aptTemplates.map((t) => {
+                          const mismatches = getMismatchedSystems(t.id);
+                          return (
+                            <SelectItem key={t.id} value={t.id}>
+                              <span className="flex items-center gap-2">
+                                {t.name}
+                                {mismatches.length > 0 && (
+                                  <HugeiconsIcon icon={AlertCircleIcon} size={11} className="text-amber-500 shrink-0" />
+                                )}
+                              </span>
+                            </SelectItem>
+                          );
+                        })}
                       </SelectContent>
                     </Select>
+                    {(() => {
+                      const mismatches = getMismatchedSystems(grid[`${f}_${i}`] ?? null);
+                      if (mismatches.length === 0) return null;
+                      return (
+                        <div className="flex items-center gap-1 mt-1 text-[10px] text-amber-600 dark:text-amber-500">
+                          <HugeiconsIcon icon={AlertCircleIcon} size={10} className="shrink-0" />
+                          <span>Uses {mismatches.join(", ")} (not in project)</span>
+                        </div>
+                      );
+                    })()}
                   </TableCell>
                 ))}
               </TableRow>
@@ -1571,7 +2459,7 @@ function PiecePools({
                       <TableCell className="py-3 px-4">
                         <div className="grid grid-cols-3 gap-0.5 w-fit">
                           {group.locations.map((loc, i) => (
-                            <span key={i} className="text-[10px] text-muted-foreground text-center leading-tight py-0.5 px-1 rounded border border-border/60 w-12">{loc}</span>
+                            <span key={i} className="text-[10 px] text-muted-foreground text-center leading-tight py-0.5 px-1 rounded border border-border/60 w-12">{loc}</span>
                           ))}
                         </div>
                       </TableCell>

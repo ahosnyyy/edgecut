@@ -12,6 +12,8 @@ import BuildingDetailPage from "./pages/BuildingDetailPage";
 import TemplateManager from "./pages/TemplateManager";
 import ApartmentTemplateManager from "./pages/ApartmentTemplateManager";
 import Settings from "./pages/Settings";
+import StockCatalog from "./pages/StockCatalog";
+import ProfileSystemManager from "./pages/ProfileSystemManager";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -41,8 +43,10 @@ const router = createBrowserRouter([
       { path: "/projects/:id", element: <ProjectBuilder /> },
       { path: "/projects/:id/buildings/:buildingId", element: <BuildingDetailPage /> },
       { path: "/apartment-templates", element: <ApartmentTemplateManager /> },
-      { path: "/templates", element: <TemplateManager /> },
+      { path: "/piece-templates", element: <TemplateManager /> },
       { path: "/settings", element: <Settings /> },
+      { path: "/stock-catalog", element: <StockCatalog /> },
+      { path: "/profile-systems", element: <ProfileSystemManager /> },
     ],
   },
   {

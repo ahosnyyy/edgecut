@@ -10,6 +10,9 @@ import {
   templates,
   templateVariables,
   templatePieces,
+  stock,
+  stockCatalog,
+  profileSystems,
 } from "../db/schema.js";
 import type { Env } from "../index.js";
 
@@ -86,6 +89,7 @@ projectRoutes.get("/:id", async (c) => {
 
   return c.json({
     ...proj[0],
+    profileSystem: JSON.parse(proj[0].profileSystem),
     buildings: bldgs,
     assignments,
     openingSizes: sizes,
@@ -158,6 +162,12 @@ projectRoutes.put("/:id", async (c) => {
     client?: string;
     notes?: string;
     status?: string;
+    measurementSystem?: string;
+    unit?: string;
+    kerfWidth?: number;
+    pricePerBar?: number;
+    optimizationStrategy?: string;
+    profileSystem?: string[];
   }>();
 
   const now = Date.now();
@@ -169,6 +179,12 @@ projectRoutes.put("/:id", async (c) => {
       client: body.client ?? existing[0].client,
       notes: body.notes ?? existing[0].notes,
       status: newStatus,
+      measurementSystem: (body.measurementSystem as "metric" | "imperial") ?? existing[0].measurementSystem,
+      unit: body.unit ?? existing[0].unit,
+      kerfWidth: body.kerfWidth ?? existing[0].kerfWidth,
+      pricePerBar: body.pricePerBar ?? existing[0].pricePerBar,
+      optimizationStrategy: (body.optimizationStrategy as "balanced" | "maximize_large_bars") ?? existing[0].optimizationStrategy,
+      profileSystem: body.profileSystem ? JSON.stringify(body.profileSystem) : existing[0].profileSystem,
       updatedAt: now,
     })
     .where(eq(projects.id, id));
@@ -190,7 +206,35 @@ projectRoutes.delete("/:id", async (c) => {
   const db = getDb(c.env);
   const id = c.req.param("id");
 
+  // Release reservedQty on linked stock defaults for all project stock entries
+  const projectStock = await db
+    .select()
+    .from(stock)
+    .where(eq(stock.projectId, id));
+
+  for (const entry of projectStock) {
+    if (entry.sourceDefaultId && entry.quantity > 0) {
+      const def = await db
+        .select()
+        .from(stockCatalog)
+        .where(eq(stockCatalog.id, entry.sourceDefaultId))
+        .limit(1);
+      if (def.length > 0 && def[0].quantity !== -1) {
+        await db
+          .update(stockCatalog)
+          .set({ reservedQty: Math.max(0, def[0].reservedQty - entry.quantity) })
+          .where(eq(stockCatalog.id, entry.sourceDefaultId));
+      }
+    }
+  }
+
+  // Delete all project data
+  await db.delete(stock).where(eq(stock.projectId, id));
+  await db.delete(projectFloorAssignments).where(eq(projectFloorAssignments.projectId, id));
+  await db.delete(projectOpeningSizes).where(eq(projectOpeningSizes.projectId, id));
+  await db.delete(buildings).where(eq(buildings.projectId, id));
   await db.delete(projects).where(eq(projects.id, id));
+
   return c.json({ deleted: true });
 });
 
@@ -408,6 +452,7 @@ projectRoutes.get("/:id/pieces", async (c) => {
     pieceTemplateId: string;
     templateName: string;
     profileType: string;
+    profileSystemKey: string | null;
     pieces: { label: string; length: number; quantity: number; source: string }[];
   }> = {};
 
@@ -428,6 +473,27 @@ projectRoutes.get("/:id/pieces", async (c) => {
 
     const pieceTemplateId = opening[0].pieceTemplateId;
 
+    // Get the piece template (for name + profile system)
+    const tpl = await db
+      .select()
+      .from(templates)
+      .where(eq(templates.id, pieceTemplateId))
+      .limit(1);
+
+    const templateName = tpl[0]?.name ?? "Unknown";
+    const profileSystemId = tpl[0]?.profileSystemId ?? null;
+
+    // Resolve profile system key
+    let profileSystemKey: string | null = null;
+    if (profileSystemId) {
+      const sys = await db
+        .select({ key: profileSystems.key })
+        .from(profileSystems)
+        .where(eq(profileSystems.id, profileSystemId))
+        .limit(1);
+      profileSystemKey = sys[0]?.key ?? null;
+    }
+
     // Get template variables
     const vars = await db
       .select()
@@ -442,14 +508,6 @@ projectRoutes.get("/:id/pieces", async (c) => {
       .where(eq(templatePieces.templateId, pieceTemplateId))
       .orderBy(templatePieces.sortOrder);
 
-    // Get template name
-    const tpl = await db
-      .select()
-      .from(templates)
-      .where(eq(templates.id, pieceTemplateId))
-      .limit(1);
-
-    const templateName = tpl[0]?.name ?? "Unknown";
     const buildingName = buildingNames[size.buildingId] ?? "Unknown";
 
     // Build formula context
@@ -463,12 +521,13 @@ projectRoutes.get("/:id/pieces", async (c) => {
 
     // Evaluate each piece
     for (const piece of pieces) {
-      const poolKey = `${pieceTemplateId}__${piece.profileType}`;
+      const poolKey = `${pieceTemplateId}__${piece.profileType}__${profileSystemKey ?? "none"}`;
       if (!pools[poolKey]) {
         pools[poolKey] = {
           pieceTemplateId,
           templateName,
           profileType: piece.profileType,
+          profileSystemKey,
           pieces: [],
         };
       }
@@ -572,3 +631,172 @@ function evalRPN(rpn: string[], ctx: Record<string, number>): number {
   const result = stack[0];
   return Math.round(result * 100) / 100;
 }
+
+// ─── GET /api/projects/:id/stock — List project stock ──────────────────────────
+
+projectRoutes.get("/:id/stock", async (c) => {
+  const db = getDb(c.env);
+  const id = c.req.param("id");
+
+  const rows = await db
+    .select()
+    .from(stock)
+    .where(eq(stock.projectId, id));
+
+  return c.json(rows);
+});
+
+// ─── POST /api/projects/:id/stock — Add stock entry ───────────────────────────
+
+projectRoutes.post("/:id/stock", async (c) => {
+  const db = getDb(c.env);
+  const id = c.req.param("id");
+  const body = await c.req.json<{
+    profileType: string;
+    color: string;
+    length?: number;
+    label?: string;
+    quantity?: number;
+    isRemnant?: boolean;
+    sourceDefaultId?: string;
+  }>();
+
+  const entryId = generateId();
+  const qty = body.quantity ?? -1;
+
+  // Copy profileSystem from catalog entry if linked
+  let profileSystem: string | null = null;
+  if (body.sourceDefaultId) {
+    const def = await db
+      .select()
+      .from(stockCatalog)
+      .where(eq(stockCatalog.id, body.sourceDefaultId))
+      .limit(1);
+    if (def.length > 0) {
+      profileSystem = def[0].profileSystem;
+    }
+  }
+
+  await db.insert(stock).values({
+    id: entryId,
+    projectId: id,
+    profileSystem,
+    profileType: body.profileType,
+    color: body.color,
+    length: body.length ?? null,
+    label: body.label ?? null,
+    quantity: qty,
+    isRemnant: body.isRemnant ?? false,
+    sourceDefaultId: body.sourceDefaultId ?? null,
+  });
+
+  // Reserve inventory on the stock default if linked and quantity is tracked
+  if (body.sourceDefaultId && qty > 0) {
+    const def = await db
+      .select()
+      .from(stockCatalog)
+      .where(eq(stockCatalog.id, body.sourceDefaultId))
+      .limit(1);
+    if (def.length > 0 && def[0].quantity !== -1) {
+      await db
+        .update(stockCatalog)
+        .set({ reservedQty: def[0].reservedQty + qty })
+        .where(eq(stockCatalog.id, body.sourceDefaultId));
+    }
+  }
+
+  return c.json({ id: entryId }, 201);
+});
+
+// ─── PUT /api/projects/:id/stock/:stockId — Update stock entry ────────────────
+
+projectRoutes.put("/:id/stock/:stockId", async (c) => {
+  const db = getDb(c.env);
+  const stockId = c.req.param("stockId");
+
+  const existing = await db
+    .select()
+    .from(stock)
+    .where(eq(stock.id, stockId))
+    .limit(1);
+  if (existing.length === 0) {
+    return c.json({ error: "Stock entry not found" }, 404);
+  }
+
+  const body = await c.req.json<{
+    profileType?: string;
+    color?: string;
+    length?: number;
+    label?: string;
+    quantity?: number;
+    isRemnant?: boolean;
+  }>();
+
+  await db
+    .update(stock)
+    .set({
+      profileType: body.profileType ?? existing[0].profileType,
+      color: body.color ?? existing[0].color,
+      length: body.length !== undefined ? body.length : existing[0].length,
+      label: body.label !== undefined ? body.label : existing[0].label,
+      quantity: body.quantity ?? existing[0].quantity,
+      isRemnant: body.isRemnant ?? existing[0].isRemnant,
+    })
+    .where(eq(stock.id, stockId));
+
+  // Adjust reservedQty on the linked stock default if quantity changed
+  if (body.quantity !== undefined && existing[0].sourceDefaultId) {
+    const oldQty = existing[0].quantity === -1 ? 0 : existing[0].quantity;
+    const newQty = body.quantity === -1 ? 0 : body.quantity;
+    const delta = newQty - oldQty;
+    if (delta !== 0) {
+      const def = await db
+        .select()
+        .from(stockCatalog)
+        .where(eq(stockCatalog.id, existing[0].sourceDefaultId))
+        .limit(1);
+      if (def.length > 0 && def[0].quantity !== -1) {
+        await db
+          .update(stockCatalog)
+          .set({ reservedQty: Math.max(0, def[0].reservedQty + delta) })
+          .where(eq(stockCatalog.id, existing[0].sourceDefaultId));
+      }
+    }
+  }
+
+  return c.json({ id: stockId, updated: true });
+});
+
+// ─── DELETE /api/projects/:id/stock/:stockId — Delete stock entry ─────────────
+
+projectRoutes.delete("/:id/stock/:stockId", async (c) => {
+  const db = getDb(c.env);
+  const stockId = c.req.param("stockId");
+
+  // Find the stock entry to check for sourceDefaultId before deleting
+  const existing = await db
+    .select()
+    .from(stock)
+    .where(eq(stock.id, stockId))
+    .limit(1);
+
+  await db.delete(stock).where(eq(stock.id, stockId));
+
+  // Release reservation on the stock default if linked
+  if (existing.length > 0 && existing[0].sourceDefaultId && existing[0].quantity > 0) {
+    const def = await db
+      .select()
+      .from(stockCatalog)
+      .where(eq(stockCatalog.id, existing[0].sourceDefaultId!))
+      .limit(1);
+    if (def.length > 0 && def[0].quantity !== -1) {
+      await db
+        .update(stockCatalog)
+        .set({ reservedQty: Math.max(0, def[0].reservedQty - existing[0].quantity) })
+        .where(eq(stockCatalog.id, existing[0].sourceDefaultId!));
+    }
+  }
+
+  return c.json({ deleted: true });
+});
+

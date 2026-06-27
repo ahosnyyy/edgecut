@@ -6,6 +6,13 @@ import { Card, CardAction, CardDescription, CardFooter, CardHeader, CardTitle } 
 import { Input } from "../components/ui/input";
 import { Label } from "../components/ui/label";
 import { Badge } from "../components/ui/badge";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "../components/ui/select";
 import { ScrollArea } from "../components/ui/scroll-area";
 import { Separator } from "../components/ui/separator";
 import {
@@ -27,6 +34,7 @@ export default function ProjectsList() {
   const [name, setName] = useState("");
   const [client, setClient] = useState("");
   const [search, setSearch] = useState("");
+  const [filterStatus, setFilterStatus] = useState<string>("all");
 
   const handleCreate = async () => {
     if (!name.trim()) return;
@@ -42,14 +50,20 @@ export default function ProjectsList() {
 
   const filtered = useMemo(() => {
     const list = projects ?? [];
-    if (!search.trim()) return list;
-    const q = search.toLowerCase();
-    return list.filter(
-      (p) =>
-        p.name.toLowerCase().includes(q) ||
-        (p.client ?? "").toLowerCase().includes(q),
-    );
-  }, [projects, search]);
+    let result = list;
+    if (filterStatus !== "all") {
+      result = result.filter((p) => p.status === filterStatus);
+    }
+    if (search.trim()) {
+      const q = search.toLowerCase();
+      result = result.filter(
+        (p) =>
+          p.name.toLowerCase().includes(q) ||
+          (p.client ?? "").toLowerCase().includes(q),
+      );
+    }
+    return result;
+  }, [projects, search, filterStatus]);
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
@@ -76,10 +90,24 @@ export default function ProjectsList() {
               className="w-48 pl-7 text-xs"
             />
           </div>
-          <Button variant="outline" className="gap-1.5">
-            <HugeiconsIcon icon={FilterIcon} size={14} />
-            Filter
-          </Button>
+          <Select
+            value={filterStatus}
+            onValueChange={(v) => setFilterStatus(v ?? "all")}
+          >
+            <SelectTrigger className="w-32 h-8 text-xs gap-1.5">
+              <HugeiconsIcon icon={FilterIcon} size={14} className="text-muted-foreground" />
+              <SelectValue>
+                {filterStatus === "all" ? "All Status" : filterStatus.charAt(0).toUpperCase() + filterStatus.slice(1)}
+              </SelectValue>
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Status</SelectItem>
+              <SelectItem value="draft">Draft</SelectItem>
+              <SelectItem value="active">Active</SelectItem>
+              <SelectItem value="completed">Completed</SelectItem>
+              <SelectItem value="archived">Archived</SelectItem>
+            </SelectContent>
+          </Select>
         </div>
       </div>
 
@@ -90,15 +118,26 @@ export default function ProjectsList() {
               Loading projects...
             </div>
           ) : filtered.length === 0 ? (
-            search.trim() ? (
+            (search.trim() || filterStatus !== "all") ? (
               <Empty>
                 <EmptyHeader>
                   <EmptyMedia variant="icon">
-                    <HugeiconsIcon icon={Search01Icon} />
+                    <HugeiconsIcon icon={FilterIcon} />
                   </EmptyMedia>
-                  <EmptyTitle>No projects found</EmptyTitle>
-                  <EmptyDescription>No projects match your search. Try a different query.</EmptyDescription>
+                  <EmptyTitle>No projects match your filters</EmptyTitle>
+                  <EmptyDescription>
+                    {search.trim() && filterStatus !== "all"
+                      ? `No projects match "${search.trim()}" with status "${filterStatus}".`
+                      : search.trim()
+                        ? `No projects match "${search.trim()}".`
+                        : `No projects with status "${filterStatus}".`}
+                  </EmptyDescription>
                 </EmptyHeader>
+                <EmptyContent>
+                  <Button variant="outline" size="sm" onClick={() => { setSearch(""); setFilterStatus("all"); }}>
+                    Clear filters
+                  </Button>
+                </EmptyContent>
               </Empty>
             ) : (
               <Empty>

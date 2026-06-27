@@ -23,7 +23,9 @@ const routeLabels: Record<string, string> = {
   "cutting-optimizer": "Quick Optimize",
   projects: "Projects",
   "apartment-templates": "Apartment Types",
-  templates: "Piece Templates",
+  "piece-templates": "Piece Templates",
+  "profile-systems": "Profile Systems",
+  "stock-catalog": "Stock Catalog",
   settings: "Settings",
 };
 

@@ -5,6 +5,7 @@ import {
   templates,
   templateVariables,
   templatePieces,
+  profileSystems,
 } from "../db/schema.js";
 import type { Env } from "../index.js";
 
@@ -59,7 +60,8 @@ templatesRoutes.post("/", async (c) => {
   const body = await c.req.json<{
     name: string;
     type: "window" | "door";
-    category: string;
+    category?: string;
+    profileSystemId?: string | null;
     variables?: { name: string; label: string; defaultValue: number }[];
     pieces?: {
       label: string;
@@ -69,8 +71,8 @@ templatesRoutes.post("/", async (c) => {
     }[];
   }>();
 
-  if (!body.name || !body.type || !body.category) {
-    return c.json({ error: "name, type, and category are required" }, 400);
+  if (!body.name || !body.type) {
+    return c.json({ error: "name and type are required" }, 400);
   }
 
   const now = Date.now();
@@ -80,15 +82,34 @@ templatesRoutes.post("/", async (c) => {
     id,
     name: body.name,
     type: body.type,
-    category: body.category,
+    category: body.category ?? "General",
+    profileSystemId: body.profileSystemId ?? null,
     isBuiltin: false,
     createdAt: now,
     updatedAt: now,
   });
 
-  if (body.variables) {
-    for (let i = 0; i < body.variables.length; i++) {
-      const v = body.variables[i];
+  // Auto-populate variables from profile system if no explicit variables provided
+  let variablesToSave = body.variables;
+  if (!variablesToSave && body.profileSystemId) {
+    const sys = await db
+      .select()
+      .from(profileSystems)
+      .where(eq(profileSystems.id, body.profileSystemId))
+      .limit(1);
+    if (sys.length > 0) {
+      try {
+        const constants = JSON.parse(sys[0].constants) as { name: string; label: string; defaultValue: number }[];
+        variablesToSave = constants;
+      } catch {
+        // ignore parse errors
+      }
+    }
+  }
+
+  if (variablesToSave) {
+    for (let i = 0; i < variablesToSave.length; i++) {
+      const v = variablesToSave[i];
       await db.insert(templateVariables).values({
         id: generateId(),
         templateId: id,
@@ -115,7 +136,7 @@ templatesRoutes.post("/", async (c) => {
     }
   }
 
-  return c.json({ id, name: body.name, type: body.type, category: body.category, isBuiltin: false }, 201);
+  return c.json({ id, name: body.name, type: body.type, category: body.category ?? "General", profileSystemId: body.profileSystemId ?? null, isBuiltin: false }, 201);
 });
 
 // ─── PUT /api/templates/:id — Update template (only non-builtin) ─────────────
@@ -140,6 +161,7 @@ templatesRoutes.put("/:id", async (c) => {
     name?: string;
     type?: "window" | "door";
     category?: string;
+    profileSystemId?: string | null;
     variables?: { name: string; label: string; defaultValue: number }[];
     pieces?: {
       label: string;
@@ -156,16 +178,35 @@ templatesRoutes.put("/:id", async (c) => {
       name: body.name ?? existing[0].name,
       type: body.type ?? existing[0].type,
       category: body.category ?? existing[0].category,
+      profileSystemId: body.profileSystemId !== undefined ? body.profileSystemId : existing[0].profileSystemId,
       updatedAt: now,
     })
     .where(eq(templates.id, id));
 
-  if (body.variables) {
+  // Auto-populate variables from profile system if no explicit variables provided
+  let variablesToSave = body.variables;
+  if (variablesToSave === undefined && body.profileSystemId !== undefined && body.profileSystemId) {
+    const sys = await db
+      .select()
+      .from(profileSystems)
+      .where(eq(profileSystems.id, body.profileSystemId))
+      .limit(1);
+    if (sys.length > 0) {
+      try {
+        const constants = JSON.parse(sys[0].constants) as { name: string; label: string; defaultValue: number }[];
+        variablesToSave = constants;
+      } catch {
+        // ignore parse errors
+      }
+    }
+  }
+
+  if (variablesToSave) {
     await db
       .delete(templateVariables)
       .where(eq(templateVariables.templateId, id));
-    for (let i = 0; i < body.variables.length; i++) {
-      const v = body.variables[i];
+    for (let i = 0; i < variablesToSave.length; i++) {
+      const v = variablesToSave[i];
       await db.insert(templateVariables).values({
         id: generateId(),
         templateId: id,
@@ -196,7 +237,7 @@ templatesRoutes.put("/:id", async (c) => {
   return c.json({ id, updated: true });
 });
 
-// ─── DELETE /api/templates/:id — Delete template (only non-builtin) ──────────
+// ─── DELETE /api/templates/:id — Delete template ─────────────────────────────
 
 templatesRoutes.delete("/:id", async (c) => {
   const db = getDb(c.env);
@@ -209,9 +250,6 @@ templatesRoutes.delete("/:id", async (c) => {
     .limit(1);
   if (existing.length === 0) {
     return c.json({ error: "Template not found" }, 404);
-  }
-  if (existing[0].isBuiltin) {
-    return c.json({ error: "Built-in templates cannot be deleted" }, 403);
   }
 
   await db.delete(templates).where(eq(templates.id, id));
@@ -253,6 +291,7 @@ templatesRoutes.post("/:id/duplicate", async (c) => {
     name: `${tpl[0].name} (Copy)`,
     type: tpl[0].type,
     category: tpl[0].category,
+    profileSystemId: tpl[0].profileSystemId,
     isBuiltin: false,
     createdAt: now,
     updatedAt: now,
