@@ -304,7 +304,8 @@ function StockManagement({ projectId, profileSystems }: { projectId: string; pro
     const def = stockCatalog?.find((d) => d.id === defaultId);
     if (!def) return;
     setSelectedDefaultId(defaultId);
-    setNewQty(def.quantity);
+    const available = def.quantity === -1 ? -1 : def.quantity - def.reservedQty - def.usedQty;
+    setNewQty(available <= 0 ? 0 : available);
     setNewLength(def.length);
     setNewLabel("");
   };
@@ -605,9 +606,9 @@ function StockManagement({ projectId, profileSystems }: { projectId: string; pro
                         )}
                         <span className="truncate">
                           {def
-                            ? ` · ${profileTypeLabel(def.profileType)} · ${entry.length ?? def.length} mm`
+                            ? ` · ${profileTypeLabel(def.profileType)} · ${((entry.length ?? def.length) / 100).toFixed(0)} cm`
                             : entry.length != null
-                              ? ` · ${profileTypeLabel(entry.profileType)} · ${entry.length} mm`
+                              ? ` · ${profileTypeLabel(entry.profileType)} · ${(entry.length / 100).toFixed(0)} cm`
                               : "Custom"}
                         </span>
                       </>
@@ -737,7 +738,7 @@ function StockManagement({ projectId, profileSystems }: { projectId: string; pro
                         return (
                           <SelectItem key={d.id} value={d.id}>
                             <span className="flex items-center gap-2">
-                              {d.label ?? `${d.profileType} ${d.length}mm`}
+                              {d.label ?? `${d.profileType} ${(d.length / 100).toFixed(0)}cm`}
                               {avail >= 0 && (
                                 <span className={
                                   "text-[10px] " +
@@ -774,7 +775,7 @@ function StockManagement({ projectId, profileSystems }: { projectId: string; pro
               <div className="grid grid-cols-2 gap-3">
                 <div className="flex flex-col gap-1.5">
                   <Label htmlFor="ns-length">
-                    Length (mm)
+                    Length (cm)
                     {effectiveMode === "catalog" ? (
                       <span className="text-[10px] text-muted-foreground ml-1">(from catalog)</span>
                     ) : (
@@ -785,17 +786,22 @@ function StockManagement({ projectId, profileSystems }: { projectId: string; pro
                     id="ns-length"
                     type="number"
                     min={1}
-                    value={newLength}
+                    value={newLength === "" ? "" : newLength / 100}
                     disabled={effectiveMode === "catalog"}
                     onChange={(e) => {
                       const val = parseFloat(e.target.value);
-                      setNewLength(isNaN(val) ? "" : val);
+                      setNewLength(isNaN(val) ? "" : val * 100);
                     }}
-                    placeholder="e.g. 3500"
+                    placeholder="e.g. 350"
                   />
                 </div>
                 <div className="flex flex-col gap-1.5">
-                  <Label htmlFor="ns-qty">Quantity</Label>
+                  <Label htmlFor="ns-qty">
+                    Quantity
+                    {effectiveMode === "catalog" && selectedDefaultId && newQty !== -1 && (
+                      <span className="text-[10px] text-muted-foreground ml-1">(of {stockCatalog?.find(d => d.id === selectedDefaultId)?.quantity ?? 0} total)</span>
+                    )}
+                  </Label>
                   <Input
                     id="ns-qty"
                     type="text"
@@ -1800,8 +1806,8 @@ function OpeningSizes({
     const g: SizeGrid = {};
     for (const s of existingSizes) {
       g[`${s.apartmentTemplateOpeningId}_${s.floor}_${s.apartmentIndex}`] = {
-        width: String(s.width),
-        height: String(s.height),
+        width: String(s.width / 100),
+        height: String(s.height / 100),
       };
     }
     setSizes(g);
@@ -1865,8 +1871,8 @@ function OpeningSizes({
     const g: SizeGrid = {};
     for (const s of existingSizes) {
       g[`${s.apartmentTemplateOpeningId}_${s.floor}_${s.apartmentIndex}`] = {
-        width: String(s.width),
-        height: String(s.height),
+        width: String(s.width / 100),
+        height: String(s.height / 100),
       };
     }
     setSizes(g);
@@ -1883,8 +1889,8 @@ function OpeningSizes({
         apartmentTemplateOpeningId: openingId,
         floor: parseInt(floor),
         apartmentIndex: parseInt(aptIndex),
-        width: w,
-        height: h,
+        width: w * 100,
+        height: h * 100,
       });
     }
     await saveMutation.mutateAsync({ projectId, buildingId: building.id, sizes: sizesArr });
@@ -2132,7 +2138,7 @@ function OpeningSizeGrid({
         <div className="flex items-center gap-1">
           <Input
             type="number"
-            placeholder="W"
+            placeholder="W (cm)"
             value={bulkW}
             onChange={(e) => setBulkW(e.target.value)}
             className="w-20 h-7 text-xs"
@@ -2140,7 +2146,7 @@ function OpeningSizeGrid({
           <span className="text-xs text-muted-foreground">×</span>
           <Input
             type="number"
-            placeholder="H"
+            placeholder="H (cm)"
             value={bulkH}
             onChange={(e) => setBulkH(e.target.value)}
             className="w-20 h-7 text-xs"
@@ -2206,7 +2212,7 @@ function OpeningSizeGrid({
                         <div className="flex items-center justify-center gap-1">
                           <Input
                             type="number"
-                            placeholder="W"
+                            placeholder="W (cm)"
                             value={cellSize.width}
                             onChange={(e) => onCellChange(openingId, f, i, "width", e.target.value)}
                             className={`w-24 h-6 text-xs ${tint ? `ring-1 ${tint}` : ""}`}
@@ -2214,7 +2220,7 @@ function OpeningSizeGrid({
                           <span className="text-xs text-muted-foreground">×</span>
                           <Input
                             type="number"
-                            placeholder="H"
+                            placeholder="H (cm)"
                             value={cellSize.height}
                             onChange={(e) => onCellChange(openingId, f, i, "height", e.target.value)}
                             className={`w-24 h-6 text-xs ${tint ? `ring-1 ${tint}` : ""}`}
@@ -2264,8 +2270,8 @@ function PiecePools({
     const g: SizeGrid = {};
     for (const s of existingSizes) {
       g[`${s.apartmentTemplateOpeningId}_${s.floor}_${s.apartmentIndex}`] = {
-        width: String(s.width),
-        height: String(s.height),
+        width: String(s.width / 100),
+        height: String(s.height / 100),
       };
     }
     return g;
@@ -2443,8 +2449,8 @@ function PiecePools({
                     <TableHead className="h-9 text-xs w-24 font-semibold">{activeGroup.opening.label}</TableHead>
                     <TableHead className="h-9 text-xs text-center font-semibold">Qty</TableHead>
                     <TableHead className="h-9 text-xs text-start font-semibold">Locations</TableHead>
-                    <TableHead className="h-9 text-xs text-center font-semibold">Width</TableHead>
-                    <TableHead className="h-9 text-xs text-center font-semibold">Height</TableHead>
+                    <TableHead className="h-9 text-xs text-center font-semibold">Width (cm)</TableHead>
+                    <TableHead className="h-9 text-xs text-center font-semibold">Height (cm)</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>

@@ -15,6 +15,7 @@ import {
   profileSystems,
 } from "../db/schema.js";
 import type { Env } from "../index.js";
+import { evalFormula } from "../lib/formula.js";
 
 export const projectRoutes = new Hono<{ Bindings: Env }>();
 
@@ -483,15 +484,20 @@ projectRoutes.get("/:id/pieces", async (c) => {
     const templateName = tpl[0]?.name ?? "Unknown";
     const profileSystemId = tpl[0]?.profileSystemId ?? null;
 
-    // Resolve profile system key
+    // Resolve profile system key and constants
     let profileSystemKey: string | null = null;
+    let sysConstants: Record<string, number> = {};
     if (profileSystemId) {
       const sys = await db
-        .select({ key: profileSystems.key })
+        .select({ key: profileSystems.key, constants: profileSystems.constants })
         .from(profileSystems)
         .where(eq(profileSystems.id, profileSystemId))
         .limit(1);
       profileSystemKey = sys[0]?.key ?? null;
+      try {
+        const consts = JSON.parse(sys[0]?.constants ?? "[]") as { name: string; defaultValue: number }[];
+        for (const c of consts) sysConstants[c.name] = c.defaultValue;
+      } catch {}
     }
 
     // Get template variables
@@ -510,10 +516,11 @@ projectRoutes.get("/:id/pieces", async (c) => {
 
     const buildingName = buildingNames[size.buildingId] ?? "Unknown";
 
-    // Build formula context
+    // Build formula context: W, H + profile system constants + template variables
     const ctx: Record<string, number> = {
       W: size.width,
       H: size.height,
+      ...sysConstants,
     };
     for (const v of vars) {
       ctx[v.name] = v.defaultValue;
@@ -555,82 +562,6 @@ projectRoutes.get("/:id/pieces", async (c) => {
     pools: Object.values(pools),
   });
 });
-
-// Simple inline formula evaluator for the API side
-function evalFormula(formula: string, ctx: Record<string, number>): number {
-  const tokens = tokenize(formula);
-  const rpn = toRPN(tokens);
-  return evalRPN(rpn, ctx);
-}
-
-function tokenize(expr: string): string[] {
-  const tokens: string[] = [];
-  let i = 0;
-  while (i < expr.length) {
-    const ch = expr[i];
-    if (ch === " " || ch === "\t" || ch === "\n") { i++; continue; }
-    if (ch === "(" || ch === ")") { tokens.push(ch); i++; continue; }
-    if ("+-*/".includes(ch)) { tokens.push(ch); i++; continue; }
-    if (/[0-9.]/.test(ch)) {
-      let num = "";
-      while (i < expr.length && /[0-9.]/.test(expr[i])) { num += expr[i]; i++; }
-      tokens.push(num);
-      continue;
-    }
-    if (/[a-zA-Z_]/.test(ch)) {
-      let ident = "";
-      while (i < expr.length && /[a-zA-Z0-9_]/.test(expr[i])) { ident += expr[i]; i++; }
-      tokens.push(ident);
-      continue;
-    }
-    throw new Error(`Unexpected character: "${ch}"`);
-  }
-  return tokens;
-}
-
-const OPS: Record<string, number> = { "+": 1, "-": 1, "*": 2, "/": 2 };
-
-function toRPN(tokens: string[]): string[] {
-  const output: string[] = [];
-  const stack: string[] = [];
-  for (const token of tokens) {
-    if (token === "(") { stack.push(token); }
-    else if (token === ")") {
-      while (stack.length && stack[stack.length - 1] !== "(") output.push(stack.pop()!);
-      stack.pop();
-    } else if (token in OPS) {
-      while (stack.length && stack[stack.length - 1] in OPS && OPS[stack[stack.length - 1]] >= OPS[token]) {
-        output.push(stack.pop()!);
-      }
-      stack.push(token);
-    } else { output.push(token); }
-  }
-  while (stack.length) output.push(stack.pop()!);
-  return output;
-}
-
-function evalRPN(rpn: string[], ctx: Record<string, number>): number {
-  const stack: number[] = [];
-  for (const token of rpn) {
-    if (token in OPS) {
-      const b = stack.pop()!;
-      const a = stack.pop()!;
-      switch (token) {
-        case "+": stack.push(a + b); break;
-        case "-": stack.push(a - b); break;
-        case "*": stack.push(a * b); break;
-        case "/": if (b === 0) throw new Error("Division by zero"); stack.push(a / b); break;
-      }
-    } else if (/^[0-9.]+$/.test(token)) {
-      stack.push(parseFloat(token));
-    } else {
-      if (!(token in ctx)) throw new Error(`Unknown variable: ${token}`);
-      stack.push(ctx[token]);
-    }
-  }
-  const result = stack[0];
-  return Math.round(result * 100) / 100;
-}
 
 // ─── GET /api/projects/:id/stock — List project stock ──────────────────────────
 

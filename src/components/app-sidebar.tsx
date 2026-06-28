@@ -24,13 +24,19 @@ import {
   ScissorIcon,
   FolderIcon,
   Home13Icon,
-  RulerIcon,
+  Grid02Icon,
   PackageIcon,
-  Settings02Icon,
+  SlidersVerticalIcon,
+  DashboardSquare02Icon,
 } from "@hugeicons/core-free-icons"
 import { useProjects } from "@/hooks/useProjects"
 
 const workspaceNav: NavItem[] = [
+  {
+    title: "Dashboard",
+    url: "/dashboard",
+    icon: <HugeiconsIcon icon={DashboardSquare02Icon} strokeWidth={2} className="size-4" />,
+  },
   {
     title: "Projects",
     url: "/projects",
@@ -55,12 +61,12 @@ const catalogNav: NavItem[] = [
   {
     title: "Piece Templates",
     url: "/piece-templates",
-    icon: <HugeiconsIcon icon={RulerIcon} strokeWidth={2} className="size-4" />,
+    icon: <HugeiconsIcon icon={Grid02Icon} strokeWidth={2} className="size-4" />,
   },
   {
     title: "Profile Systems",
     url: "/profile-systems",
-    icon: <HugeiconsIcon icon={Settings02Icon} strokeWidth={2} className="size-4" />,
+    icon: <HugeiconsIcon icon={SlidersVerticalIcon} strokeWidth={2} className="size-4" />,
   },
 ]
 
@@ -112,11 +118,11 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
         <div className="hidden group-data-[collapsible=icon]:flex justify-center px-3">
           <SidebarSeparator className="w-8" />
         </div>
-        <NavGroup label="Catalog" items={catalogNav} />
+        <NavGroup label="Inventory" items={inventoryNav} />
         <div className="hidden group-data-[collapsible=icon]:flex justify-center px-3">
           <SidebarSeparator className="w-8" />
         </div>
-        <NavGroup label="Inventory" items={inventoryNav} />
+        <NavGroup label="Catalog" items={catalogNav} />
         <div className="hidden group-data-[collapsible=icon]:flex justify-center px-3">
           <SidebarSeparator className="w-8" />
         </div>

@@ -5,6 +5,7 @@ import { AuthProvider } from "./auth/useAuth";
 import ProtectedRoute from "./auth/ProtectedRoute";
 import AppShell from "./components/layout/AppShell";
 import Login from "./pages/Login";
+import Dashboard from "./pages/Dashboard";
 import QuickOptimize from "./pages/QuickOptimize";
 import ProjectsList from "./pages/ProjectsList";
 import ProjectBuilder from "./pages/ProjectBuilder";
@@ -38,6 +39,7 @@ const router = createBrowserRouter([
       </ProtectedRoute>
     ),
     children: [
+      { path: "/dashboard", element: <Dashboard /> },
       { path: "/cutting-optimizer", element: <QuickOptimize /> },
       { path: "/projects", element: <ProjectsList /> },
       { path: "/projects/:id", element: <ProjectBuilder /> },
@@ -51,11 +53,11 @@ const router = createBrowserRouter([
   },
   {
     path: "/",
-    element: <Navigate to="/cutting-optimizer" replace />,
+    element: <Navigate to="/dashboard" replace />,
   },
   {
     path: "*",
-    element: <Navigate to="/cutting-optimizer" replace />,
+    element: <Navigate to="/dashboard" replace />,
   },
 ]);
 

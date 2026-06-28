@@ -12,7 +12,6 @@ import { Input } from "../components/ui/input";
 import { Label } from "../components/ui/label";
 import { Badge } from "../components/ui/badge";
 import { ScrollArea } from "../components/ui/scroll-area";
-import { Separator } from "../components/ui/separator";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select";
 import {
   Dialog,
@@ -220,7 +219,7 @@ export default function StockCatalog() {
                       >
                         {entry.profileSystem}
                       </Badge>
-                      <span className="truncate"> · {profileTypeLabel(entry.profileType)} · {entry.length} mm</span>
+                      <span className="truncate"> · {profileTypeLabel(entry.profileType)} · {(entry.length / 100).toFixed(0)} cm</span>
                     </CardDescription>
                   </CardHeader>
                   <CardFooter className="bg-muted/50 py-2.5">
@@ -239,17 +238,14 @@ export default function StockCatalog() {
                                   : "text-emerald-600 dark:text-emerald-400";
                             return (
                               <>
-                                <span className={colorClass + " font-medium"}>
-                                  {available} avail
+                                <span className={colorClass + " font-medium text-xs"}>
+                                  {available} available
                                 </span>
-                                <Separator orientation="vertical" className="my-0.5" />
-                                <span className="text-amber-600 dark:text-amber-400">
-                                  {entry.reservedQty} reserved
-                                </span>
-                                <Separator orientation="vertical" className="my-0.5" />
-                                <span className="text-blue-600 dark:text-blue-400">
-                                  {entry.usedQty} used
-                                </span>
+                                {(entry.reservedQty > 0 || entry.usedQty > 0) && (
+                                  <span className="text-muted-foreground">
+                                    ({entry.reservedQty} res · {entry.usedQty} used)
+                                  </span>
+                                )}
                               </>
                             );
                           })()}
@@ -339,7 +335,7 @@ function StockCatalogDialog({
   const [profileSystem, setProfileSystem] = useState<"manazil" | "premier">(entry?.profileSystem ?? "manazil");
   const [profileType, setProfileType] = useState(entry?.profileType ?? "");
   const [label, setLabel] = useState(entry?.label ?? "");
-  const [length, setLength] = useState(entry?.length ?? 6000);
+  const [length, setLength] = useState(entry?.length ? entry.length / 100 : 60);
   const [quantity, setQuantity] = useState(entry?.quantity ?? -1);
 
   const handleSave = () => {
@@ -347,7 +343,7 @@ function StockCatalogDialog({
       profileSystem,
       profileType: profileType || "frame",
       color: "#000000",
-      length,
+      length: length * 100,
       quantity,
       label: label.trim() || null,
     });
@@ -407,7 +403,7 @@ function StockCatalogDialog({
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div className="flex flex-col gap-1.5">
-              <Label htmlFor="sd-length">Length (mm)</Label>
+              <Label htmlFor="sd-length">Length (cm)</Label>
               <Input
                 id="sd-length"
                 type="number"
@@ -417,7 +413,7 @@ function StockCatalogDialog({
               />
             </div>
             <div className="flex flex-col gap-1.5">
-              <Label htmlFor="sd-qty">Default Quantity</Label>
+              <Label htmlFor="sd-qty">Available Quantity</Label>
               <Input
                 id="sd-qty"
                 type="text"

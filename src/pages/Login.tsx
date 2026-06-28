@@ -22,7 +22,7 @@ export default function Login() {
     setLoading(true);
     try {
       await login(email, password);
-      navigate("/cutting-optimizer", { replace: true });
+      navigate("/dashboard", { replace: true });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Login failed");
     } finally {

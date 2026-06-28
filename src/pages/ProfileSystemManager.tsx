@@ -39,7 +39,7 @@ import {
   AddSquareIcon,
   Delete02Icon,
   PencilEdit01Icon,
-  Settings02Icon,
+  SlidersVerticalIcon,
   Search01Icon,
   CheckmarkCircle01Icon,
   AlertCircleIcon,
@@ -510,7 +510,7 @@ export default function ProfileSystemManager() {
               <Empty>
                 <EmptyHeader>
                   <EmptyMedia variant="icon">
-                    <HugeiconsIcon icon={Settings02Icon} />
+                    <HugeiconsIcon icon={SlidersVerticalIcon} />
                   </EmptyMedia>
                   <EmptyTitle>No profile systems yet</EmptyTitle>
                   <EmptyDescription>

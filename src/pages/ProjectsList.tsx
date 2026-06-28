@@ -172,7 +172,7 @@ export default function ProjectsList() {
                 <Card
                   key={p.id}
                   size="sm"
-                  className="cursor-pointer hover:border-primary/40 transition-colors pb-0"
+                  className="cursor-pointer hover:border-primary/40 transition-colors pb-0 flex flex-col"
                   onClick={() => navigate(`/projects/${p.id}`)}
                 >
                   <CardHeader className="pb-1">
@@ -198,7 +198,7 @@ export default function ProjectsList() {
                       <CardDescription className="text-xs truncate">{p.client}</CardDescription>
                     )}
                   </CardHeader>
-                  <CardFooter className="bg-muted/50 py-2.5">
+                  <CardFooter className="bg-muted/50 py-2.5 mt-auto">
                     <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
                       <span>{p.completedBuildings}/{p.buildingCount} building{p.buildingCount !== 1 ? "s" : ""} completed</span>
                       <Separator orientation="vertical" className="my-0.5" />

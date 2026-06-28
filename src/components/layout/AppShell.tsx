@@ -20,6 +20,7 @@ import { useProject } from "../../hooks/useProjects";
 import { HeaderActionsProvider, useHeaderActions } from "./header-actions";
 
 const routeLabels: Record<string, string> = {
+  dashboard: "Dashboard",
   "cutting-optimizer": "Quick Optimize",
   projects: "Projects",
   "apartment-templates": "Apartment Types",

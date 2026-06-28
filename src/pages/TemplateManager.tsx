@@ -62,7 +62,7 @@ import {
   CheckmarkCircle01Icon,
   Search01Icon,
   FilterIcon,
-  RulerIcon,
+  Grid02Icon,
   Download04Icon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
@@ -232,7 +232,7 @@ export default function TemplateManager() {
               <Empty>
                 <EmptyHeader>
                   <EmptyMedia variant="icon">
-                    <HugeiconsIcon icon={RulerIcon} />
+                    <HugeiconsIcon icon={Grid02Icon} />
                   </EmptyMedia>
                   <EmptyTitle>No piece templates yet</EmptyTitle>
                   <EmptyDescription>
@@ -409,8 +409,8 @@ function TemplateEditor({
     return emptyTemplate();
   });
 
-  const [previewW, setPreviewW] = useState(1200);
-  const [previewH, setPreviewH] = useState(1400);
+  const [previewW, setPreviewW] = useState(120);
+  const [previewH, setPreviewH] = useState(140);
   const [saveError, setSaveError] = useState<string | null>(null);
 
   const isBuiltin = detail?.isBuiltin ?? false;
@@ -430,7 +430,7 @@ function TemplateEditor({
 
   // Build formula context with system constants
   const formulaCtx = useMemo((): FormulaContext => {
-    const ctx: FormulaContext = { W: previewW, H: previewH };
+    const ctx: FormulaContext = { W: previewW * 100, H: previewH * 100 };
     for (const c of systemConstants) {
       ctx[c.name] = c.defaultValue;
     }
@@ -442,7 +442,7 @@ function TemplateEditor({
       ...p,
       id: p.id || crypto.randomUUID(),
     }));
-    return generatePieces(piecesWithIds, systemConstants, previewW, previewH);
+    return generatePieces(piecesWithIds, systemConstants, previewW * 100, previewH * 100);
   }, [form.pieces, systemConstants, previewW, previewH]);
 
   const formulaErrors = useMemo(() => {
@@ -674,7 +674,7 @@ function TemplateEditor({
               )}
             </div>
             <p className="text-[11px] text-muted-foreground -mt-1">
-              Use <code className="font-mono text-[10px] px-1 py-0.5 rounded bg-muted">W</code> for opening width and <code className="font-mono text-[10px] px-1 py-0.5 rounded bg-muted">H</code> for opening height (in mm).
+              Use <code className="font-mono text-[10px] px-1 py-0.5 rounded bg-muted">W</code> for opening width and <code className="font-mono text-[10px] px-1 py-0.5 rounded bg-muted">H</code> for opening height (in cm).
               {systemConstants.length > 0 && (
                 <> System constants: {systemConstants.map((c) => (
                   <code key={c.name} className="font-mono text-[10px] px-1 py-0.5 rounded bg-muted">{c.name}</code>
@@ -774,7 +774,7 @@ function TemplateEditor({
                     onChange={(e) => setPreviewW(parseFloat(e.target.value) || 0)}
                     className="w-20 text-xs h-7"
                   />
-                  <span className="text-[10px] text-muted-foreground">mm</span>
+                  <span className="text-[10px] text-muted-foreground">cm</span>
                 </div>
                 <div className="flex items-center gap-1.5">
                   <Label className="text-xs text-muted-foreground">H</Label>
@@ -784,7 +784,7 @@ function TemplateEditor({
                     onChange={(e) => setPreviewH(parseFloat(e.target.value) || 0)}
                     className="w-20 text-xs h-7"
                   />
-                  <span className="text-[10px] text-muted-foreground">mm</span>
+                  <span className="text-[10px] text-muted-foreground">cm</span>
                 </div>
               </div>
             </div>
@@ -794,7 +794,7 @@ function TemplateEditor({
                   <TableRow>
                     <TableHead className="h-7 text-xs">Label</TableHead>
                     <TableHead className="h-7 text-xs">Profile</TableHead>
-                    <TableHead className="h-7 text-xs text-right">Length (mm)</TableHead>
+                    <TableHead className="h-7 text-xs text-right">Length (cm)</TableHead>
                     <TableHead className="h-7 text-xs text-right">Qty</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -803,7 +803,7 @@ function TemplateEditor({
                     <TableRow key={i}>
                       <TableCell className="text-xs py-1.5">{p.label}</TableCell>
                       <TableCell className="text-xs py-1.5 capitalize">{p.profileType}</TableCell>
-                      <TableCell className="text-xs py-1.5 text-right font-mono">{p.length}</TableCell>
+                      <TableCell className="text-xs py-1.5 text-right font-mono">{(p.length / 100).toFixed(1)}</TableCell>
                       <TableCell className="text-xs py-1.5 text-right">{p.quantity}</TableCell>
                     </TableRow>
                   ))}
@@ -825,7 +825,7 @@ function TemplateEditor({
                     <TableRow className="border-t-2 font-medium bg-muted/30">
                       <TableCell className="text-xs py-1.5">Total</TableCell>
                       <TableCell className="text-xs py-1.5 text-muted-foreground">{previewPieces.pieces.reduce((s, p) => s + p.quantity, 0)} cuts</TableCell>
-                      <TableCell className="text-xs py-1.5 text-right font-mono">{previewPieces.pieces.reduce((s, p) => s + p.length * p.quantity, 0).toLocaleString()}</TableCell>
+                      <TableCell className="text-xs py-1.5 text-right font-mono">{(previewPieces.pieces.reduce((s, p) => s + p.length * p.quantity, 0) / 100).toFixed(1)}</TableCell>
                       <TableCell className="text-xs py-1.5 text-right">—</TableCell>
                     </TableRow>
                   )}
