@@ -1,7 +1,13 @@
 import { Hono } from "hono";
-import { eq } from "drizzle-orm";
+import { eq, like, or } from "drizzle-orm";
 import { getDb } from "../db/client.js";
-import { profileSystems } from "../db/schema.js";
+import {
+  profileSystems,
+  templates,
+  apartmentTemplates,
+  apartmentTemplateOpenings,
+  projects,
+} from "../db/schema.js";
 import type { Env } from "../index.js";
 
 export const profileSystemRoutes = new Hono<{ Bindings: Env }>();
@@ -111,6 +117,81 @@ profileSystemRoutes.put("/:id", async (c) => {
     .where(eq(profileSystems.id, id));
 
   return c.json({ id, updated: true });
+});
+
+// ─── GET /api/profile-systems/:id/usage — Check references before delete ──────
+
+profileSystemRoutes.get("/:id/usage", async (c) => {
+  const db = getDb(c.env);
+  const id = c.req.param("id");
+
+  const system = await db
+    .select({ key: profileSystems.key, name: profileSystems.name })
+    .from(profileSystems)
+    .where(eq(profileSystems.id, id))
+    .limit(1);
+
+  if (system.length === 0) {
+    return c.json({ error: "Profile system not found" }, 404);
+  }
+
+  const key = system[0].key;
+  const references: { type: string; id: string; name: string; detail?: string }[] = [];
+
+  // Check templates (piece templates) referencing this profile system
+  const tplRefs = await db
+    .select({ id: templates.id, name: templates.name })
+    .from(templates)
+    .where(eq(templates.profileSystemId, id));
+  for (const t of tplRefs) {
+    references.push({ type: "piece_template", id: t.id, name: t.name });
+  }
+
+  // Check apartment templates referencing this profile system key
+  const aptTplRefs = await db
+    .select({ id: apartmentTemplates.id, name: apartmentTemplates.name })
+    .from(apartmentTemplates)
+    .where(like(apartmentTemplates.id, `%${key}%`));
+
+  // Apartment templates store profileSystemKeys as comma-separated in a separate query
+  // We need to check via the openings → pieceTemplate → profileSystemId chain
+  const aptWithSystem = await db
+    .select({
+      aptId: apartmentTemplates.id,
+      aptName: apartmentTemplates.name,
+    })
+    .from(apartmentTemplates)
+    .innerJoin(
+      apartmentTemplateOpenings,
+      eq(apartmentTemplateOpenings.apartmentTemplateId, apartmentTemplates.id)
+    )
+    .innerJoin(templates, eq(apartmentTemplateOpenings.pieceTemplateId, templates.id))
+    .where(eq(templates.profileSystemId, id));
+
+  const uniqueApt = new Map<string, string>();
+  for (const a of aptWithSystem) {
+    uniqueApt.set(a.aptId, a.aptName);
+  }
+  for (const [aid, aname] of uniqueApt) {
+    references.push({ type: "apartment_template", id: aid, name: aname });
+  }
+
+  // Check projects referencing this profile system key
+  const allProjects = await db
+    .select({ id: projects.id, name: projects.name, profileSystem: projects.profileSystem })
+    .from(projects);
+  for (const p of allProjects) {
+    try {
+      const systems = JSON.parse(p.profileSystem) as string[];
+      if (systems.includes(key)) {
+        references.push({ type: "project", id: p.id, name: p.name });
+      }
+    } catch {
+      // ignore parse errors
+    }
+  }
+
+  return c.json({ canDelete: references.length === 0, references });
 });
 
 // ─── DELETE /api/profile-systems/:id — Delete ─────────────────────────────────

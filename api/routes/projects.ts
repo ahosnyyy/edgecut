@@ -46,7 +46,7 @@ projectRoutes.get("/", async (c) => {
       notes: projects.notes,
       floors: projects.floors,
       apartmentsPerFloor: projects.apartmentsPerFloor,
-      apartmentLabels: projects.apartmentLabels,
+      floorLabels: projects.floorLabels,
       createdAt: projects.createdAt,
       updatedAt: projects.updatedAt,
       buildingCount: sql<number>`(SELECT COUNT(*) FROM buildings WHERE project_id = "projects"."id")`,
@@ -122,7 +122,7 @@ projectRoutes.post("/", async (c) => {
     notes: body.notes ?? null,
     floors: 1,
     apartmentsPerFloor: 1,
-    apartmentLabels: JSON.stringify(["A"]),
+    floorLabels: JSON.stringify(["A"]),
     status: "draft",
     createdAt: now,
     updatedAt: now,
@@ -135,7 +135,7 @@ projectRoutes.post("/", async (c) => {
     name: "Building A",
     floors: 6,
     apartmentsPerFloor: 4,
-    apartmentLabels: JSON.stringify(["A", "B", "C", "D"]),
+    floorLabels: JSON.stringify(["A", "B", "C", "D", "E", "F"]),
     sortOrder: 0,
     createdAt: now,
   });
@@ -248,7 +248,7 @@ projectRoutes.post("/:id/buildings", async (c) => {
     name: string;
     floors?: number;
     apartmentsPerFloor?: number;
-    apartmentLabels?: string[];
+    floorLabels?: string[];
     status?: string;
   }>();
 
@@ -269,7 +269,7 @@ projectRoutes.post("/:id/buildings", async (c) => {
     name: body.name,
     floors: body.floors ?? 6,
     apartmentsPerFloor: body.apartmentsPerFloor ?? 4,
-    apartmentLabels: JSON.stringify(body.apartmentLabels ?? ["A", "B", "C", "D"]),
+    floorLabels: JSON.stringify(body.floorLabels ?? ["A", "B", "C", "D", "E", "F"]),
     sortOrder,
     status: "draft",
     createdAt: Date.now(),
@@ -298,7 +298,7 @@ projectRoutes.put("/:id/buildings/:buildingId", async (c) => {
     name?: string;
     floors?: number;
     apartmentsPerFloor?: number;
-    apartmentLabels?: string[];
+    floorLabels?: string[];
     status?: string;
   }>();
 
@@ -308,9 +308,9 @@ projectRoutes.put("/:id/buildings/:buildingId", async (c) => {
       name: body.name ?? existing[0].name,
       floors: body.floors ?? existing[0].floors,
       apartmentsPerFloor: body.apartmentsPerFloor ?? existing[0].apartmentsPerFloor,
-      apartmentLabels: body.apartmentLabels
-        ? JSON.stringify(body.apartmentLabels)
-        : existing[0].apartmentLabels,
+      floorLabels: body.floorLabels
+        ? JSON.stringify(body.floorLabels)
+        : existing[0].floorLabels,
       status: (body.status as "draft" | "active" | "completed" | "archived") ?? existing[0].status,
     })
     .where(eq(buildings.id, buildingId));
@@ -337,6 +337,8 @@ projectRoutes.delete("/:id/buildings/:buildingId", async (c) => {
   const id = c.req.param("id");
   const buildingId = c.req.param("buildingId");
 
+  await db.delete(projectFloorAssignments).where(eq(projectFloorAssignments.buildingId, buildingId));
+  await db.delete(projectOpeningSizes).where(eq(projectOpeningSizes.buildingId, buildingId));
   await db.delete(buildings).where(eq(buildings.id, buildingId));
 
   // Re-derive project status

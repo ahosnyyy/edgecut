@@ -3,20 +3,19 @@ import { useProject, useUpdateBuilding, useDeleteBuilding } from "../hooks/usePr
 import { useApartmentTemplates } from "../hooks/useApartmentTemplates";
 import { BuildingDetail, type BuildingLike } from "./ProjectBuilder";
 import { ScrollArea } from "../components/ui/scroll-area";
+import { LoadingState } from "../components/ui/loading-states";
 
 export default function BuildingDetailPage() {
   const { id, buildingId } = useParams<{ id: string; buildingId: string }>();
   const navigate = useNavigate();
   const { data: project, isLoading } = useProject(id ?? null);
-  const { data: aptTemplates } = useApartmentTemplates();
+  const { data: aptTemplates, isLoading: aptTemplatesLoading } = useApartmentTemplates();
   const updateBuildingMutation = useUpdateBuilding();
   const deleteBuildingMutation = useDeleteBuilding();
 
-  if (isLoading) {
+  if (isLoading || aptTemplatesLoading) {
     return (
-      <div className="flex items-center justify-center h-full">
-        <p className="text-sm text-muted-foreground">Loading building...</p>
-      </div>
+      <LoadingState label="Loading building..." className="h-full" />
     );
   }
 
@@ -77,6 +76,7 @@ export default function BuildingDetailPage() {
             navigate(`/projects/${id}`);
           }}
           canDelete={buildings.length > 1}
+          isDeletingBuilding={deleteBuildingMutation.isPending}
         />
       </div>
     </ScrollArea>

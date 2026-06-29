@@ -1,5 +1,5 @@
-import { createContext, useContext, useState, useCallback, ReactNode } from "react";
-import { getToken, getStoredUser, clearToken, apiLogin } from "./apiClient";
+import { createContext, useContext, useState, useCallback, useEffect, ReactNode } from "react";
+import { getToken, getStoredUser, clearToken, setStoredUser, apiLogin, apiFetchMe } from "./apiClient";
 
 interface AuthUser {
   id: string;
@@ -10,7 +10,8 @@ interface AuthUser {
 interface AuthContextValue {
   user: AuthUser | null;
   isAuthenticated: boolean;
-  login: (email: string, password: string) => Promise<void>;
+  isLoading: boolean;
+  login: (email: string, password: string, rememberMe?: boolean) => Promise<void>;
   logout: () => void;
 }
 
@@ -21,9 +22,33 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (!getToken()) return null;
     return getStoredUser();
   });
+  const [isLoading, setIsLoading] = useState<boolean>(() => !!getToken());
 
-  const login = useCallback(async (email: string, password: string) => {
-    const result = await apiLogin(email, password);
+  useEffect(() => {
+    if (!getToken()) {
+      setIsLoading(false);
+      return;
+    }
+    let cancelled = false;
+    apiFetchMe()
+      .then((res) => {
+        if (cancelled) return;
+        setUser(res.user);
+        setStoredUser(res.user);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        clearToken();
+        setUser(null);
+      })
+      .finally(() => {
+        if (!cancelled) setIsLoading(false);
+      });
+    return () => { cancelled = true; };
+  }, []);
+
+  const login = useCallback(async (email: string, password: string, rememberMe: boolean = true) => {
+    const result = await apiLogin(email, password, rememberMe);
     setUser(result.user);
   }, []);
 
@@ -34,7 +59,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   return (
     <AuthContext.Provider
-      value={{ user, isAuthenticated: !!user, login, logout }}
+      value={{ user, isAuthenticated: !!user, isLoading, login, logout }}
     >
       {children}
     </AuthContext.Provider>

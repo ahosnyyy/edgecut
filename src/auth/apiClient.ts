@@ -3,21 +3,30 @@ const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8787";
 const JWT_KEY = "edgecut_jwt";
 const USER_KEY = "edgecut_user";
 
-export function getToken(): string | null {
-  return localStorage.getItem(JWT_KEY);
+function getStorage(): Storage {
+  return localStorage.getItem(JWT_KEY) ? localStorage
+    : sessionStorage.getItem(JWT_KEY) ? sessionStorage
+    : localStorage;
 }
 
-export function setToken(token: string): void {
-  localStorage.setItem(JWT_KEY, token);
+export function getToken(): string | null {
+  return localStorage.getItem(JWT_KEY) ?? sessionStorage.getItem(JWT_KEY);
+}
+
+export function setToken(token: string, rememberMe: boolean = true): void {
+  const storage = rememberMe ? localStorage : sessionStorage;
+  storage.setItem(JWT_KEY, token);
 }
 
 export function clearToken(): void {
   localStorage.removeItem(JWT_KEY);
   localStorage.removeItem(USER_KEY);
+  sessionStorage.removeItem(JWT_KEY);
+  sessionStorage.removeItem(USER_KEY);
 }
 
 export function getStoredUser(): { id: string; email: string; name: string | null } | null {
-  const raw = localStorage.getItem(USER_KEY);
+  const raw = getStorage().getItem(USER_KEY);
   if (!raw) return null;
   try {
     return JSON.parse(raw);
@@ -27,7 +36,7 @@ export function getStoredUser(): { id: string; email: string; name: string | nul
 }
 
 export function setStoredUser(user: { id: string; email: string; name: string | null }): void {
-  localStorage.setItem(USER_KEY, JSON.stringify(user));
+  getStorage().setItem(USER_KEY, JSON.stringify(user));
 }
 
 export interface ApiError {
@@ -56,13 +65,19 @@ export async function apiFetch<T>(
   const data = await res.json();
 
   if (!res.ok) {
+    if (res.status === 401 && !path.endsWith("/api/login") && !path.endsWith("/api/setup")) {
+      clearToken();
+      if (window.location.pathname !== "/login") {
+        window.location.href = "/login";
+      }
+    }
     throw new Error((data as ApiError).error || "Request failed");
   }
 
   return data as T;
 }
 
-export async function apiLogin(email: string, password: string): Promise<{
+export async function apiLogin(email: string, password: string, rememberMe: boolean = true): Promise<{
   token: string;
   user: { id: string; email: string; name: string | null };
 }> {
@@ -74,7 +89,7 @@ export async function apiLogin(email: string, password: string): Promise<{
     body: JSON.stringify({ email, password }),
   });
 
-  setToken(result.token);
+  setToken(result.token, rememberMe);
   setStoredUser(result.user);
   return result;
 }
@@ -98,4 +113,13 @@ export async function apiSetup(
   setToken(result.token);
   setStoredUser(result.user);
   return result;
+}
+
+export async function apiFetchMe(): Promise<{
+  user: { id: string; email: string; name: string | null };
+}> {
+  return apiFetch<{ user: { id: string; email: string; name: string | null } }>(
+    "/api/me",
+    { method: "GET" },
+  );
 }

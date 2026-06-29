@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, type ReactNode } from "react";
+import { useState, useMemo, useEffect, Fragment, type ReactNode } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useQueries } from "@tanstack/react-query";
 import {
@@ -24,6 +24,9 @@ import { Card, CardAction, CardContent, CardDescription, CardFooter, CardHeader,
 import { Input } from "../components/ui/input";
 import { Label } from "../components/ui/label";
 import { Badge } from "../components/ui/badge";
+import { LoadingState } from "../components/ui/loading-states";
+import { Spinner } from "../components/ui/spinner";
+import { SaveButton, ConfirmDialog } from "../components/ui/action-buttons";
 import {
   Combobox,
   ComboboxChips,
@@ -84,17 +87,15 @@ import { HugeiconsIcon } from "@hugeicons/react";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "../components/ui/tabs";
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "../components/ui/empty";
 import { Tooltip, TooltipTrigger, TooltipContent } from "../components/ui/tooltip";
+import { useSettings } from "../hooks/useSettings";
+import { useTemplate, type TemplatePiece } from "../hooks/useTemplates";
+import { useProfileSystems, type SystemConstant } from "../hooks/useProfileSystems";
+import { generatePieces, type TemplateVariable } from "../engine/pieceGenerator";
+import { useProfileTypes } from "../hooks/useProfileTypes";
 
-const PROFILE_TYPE_LABELS: Record<string, string> = {
-  frame: "Frame",
-  sash: "Sash",
-  mullion: "Mullion",
-  bead: "Bead",
-  custom: "Custom",
-};
-
-function profileTypeLabel(id: string): string {
-  return PROFILE_TYPE_LABELS[id] ?? id.charAt(0).toUpperCase() + id.slice(1);
+function useProfileTypeLabel() {
+  const { data: profileTypes } = useProfileTypes();
+  return (key: string) => profileTypes?.find((pt) => pt.key === key)?.label ?? key.charAt(0).toUpperCase() + key.slice(1);
 }
 
 interface AssignmentGrid {
@@ -111,6 +112,8 @@ export default function ProjectBuilder() {
   const { data: project, isLoading } = useProject(id ?? null);
   const { data: stockEntries } = useProjectStock(id ?? null);
   const { data: allStockCatalog } = useStockCatalog();
+  const { data: profileTypes } = useProfileTypes();
+  const profileTypeLabel = useProfileTypeLabel();
   const lockedSystems = useMemo(() => {
     if (!stockEntries) return new Set<string>();
     const used = new Set<string>();
@@ -132,19 +135,24 @@ export default function ProjectBuilder() {
   const [client, setClient] = useState("");
   const [status, setStatus] = useState<Project["status"]>("draft");
   const [activeTab, setActiveTab] = useState("buildings");
-  const [measurementSystem, setMeasurementSystem] = useState<Project["measurementSystem"]>("metric");
-  const [unit, setUnit] = useState("cm");
   const [kerfWidth, setKerfWidth] = useState(5);
   const [optimizationStrategy, setOptimizationStrategy] = useState<Project["optimizationStrategy"]>("maximize_large_bars");
   const [profileSystem, setProfileSystem] = useState<string[]>(["manazil"]);
+
+  // Buildings filters
+  const [buildingSearch, setBuildingSearch] = useState("");
+  const [buildingFilterStatus, setBuildingFilterStatus] = useState<string>("all");
+
+  // Stock filters
+  const [stockSearch, setStockSearch] = useState("");
+  const [stockFilterType, setStockFilterType] = useState<string>("all");
+  const [stockFilterSystem, setStockFilterSystem] = useState<string>("all");
 
   useEffect(() => {
     if (project) {
       setName(project.name);
       setClient(project.client ?? "");
       setStatus(project.status);
-      setMeasurementSystem(project.measurementSystem ?? "metric");
-      setUnit(project.unit ?? "cm");
       setKerfWidth(project.kerfWidth ?? 5);
       setOptimizationStrategy(project.optimizationStrategy ?? "maximize_large_bars");
       setProfileSystem(project.profileSystem ?? ["manazil"]);
@@ -158,8 +166,6 @@ export default function ProjectBuilder() {
       data: {
         name,
         client,
-        measurementSystem,
-        unit,
         kerfWidth,
         optimizationStrategy,
         profileSystem,
@@ -181,9 +187,7 @@ export default function ProjectBuilder() {
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center h-full">
-        <p className="text-sm text-muted-foreground">Loading project...</p>
-      </div>
+      <LoadingState label="Loading project..." className="h-full" />
     );
   }
 
@@ -199,6 +203,13 @@ export default function ProjectBuilder() {
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
+      <div className="flex items-center gap-2 px-4 py-3 shrink-0">
+        <h1 className="text-lg font-semibold truncate">{project.name}</h1>
+        {project.client && (
+          <span className="text-sm text-muted-foreground truncate">· {project.client}</span>
+        )}
+      </div>
+
       <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col min-h-0">
         <div className="flex items-center justify-between gap-3 px-4 py-3 shrink-0">
           <div className="flex items-center gap-2">
@@ -219,6 +230,93 @@ export default function ProjectBuilder() {
               </TabsTrigger>
             </TabsList>
           </div>
+
+          <TabsContent value="buildings" className="flex-1">
+            <div className="flex items-center justify-end gap-2">
+              <div className="relative">
+                <HugeiconsIcon
+                  icon={Search01Icon}
+                  size={14}
+                  className="absolute left-2 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none"
+                />
+                <Input
+                  value={buildingSearch}
+                  onChange={(e) => setBuildingSearch(e.target.value)}
+                  placeholder="Search buildings..."
+                  className="w-44 pl-7 h-8 text-xs"
+                />
+              </div>
+              <Select
+                value={buildingFilterStatus}
+                onValueChange={(v) => setBuildingFilterStatus(v ?? "all")}
+              >
+                <SelectTrigger className="w-32 h-8 text-xs gap-1.5">
+                  <HugeiconsIcon icon={FilterIcon} size={14} className="text-muted-foreground" />
+                  <SelectValue>
+                    {buildingFilterStatus === "all" ? "All Status" : buildingFilterStatus.charAt(0).toUpperCase() + buildingFilterStatus.slice(1)}
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Status</SelectItem>
+                  {buildingStatusOptions.map((opt) => (
+                    <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </TabsContent>
+
+          <TabsContent value="stock" className="flex-1">
+            <div className="flex items-center justify-end gap-2">
+              <div className="relative">
+                <HugeiconsIcon
+                  icon={Search01Icon}
+                  size={14}
+                  className="absolute left-2 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none"
+                />
+                <Input
+                  value={stockSearch}
+                  onChange={(e) => setStockSearch(e.target.value)}
+                  placeholder="Search stock..."
+                  className="w-44 pl-7 h-8 text-xs"
+                />
+              </div>
+              <Select
+                value={stockFilterSystem}
+                onValueChange={(v) => setStockFilterSystem(v ?? "all")}
+              >
+                <SelectTrigger className="w-28 h-8 text-xs gap-1.5">
+                  <HugeiconsIcon icon={FilterIcon} size={14} className="text-muted-foreground" />
+                  <SelectValue>
+                    {stockFilterSystem === "all" ? "All Systems" : stockFilterSystem.charAt(0).toUpperCase() + stockFilterSystem.slice(1)}
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Systems</SelectItem>
+                  {profileSystem.map((s) => (
+                    <SelectItem key={s} value={s}>{s.charAt(0).toUpperCase() + s.slice(1)}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Select
+                value={stockFilterType}
+                onValueChange={(v) => setStockFilterType(v ?? "all")}
+              >
+                <SelectTrigger className="w-32 h-8 text-xs gap-1.5">
+                  <HugeiconsIcon icon={FilterIcon} size={14} className="text-muted-foreground" />
+                  <SelectValue>
+                    {stockFilterType === "all" ? "All Types" : profileTypeLabel(stockFilterType)}
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Types</SelectItem>
+                  {Object.entries(profileTypes ?? []).map(([, pt]) => (
+                    <SelectItem key={pt.key} value={pt.key}>{pt.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </TabsContent>
         </div>
 
         <ScrollArea className="flex-1">
@@ -228,10 +326,23 @@ export default function ProjectBuilder() {
                 projectId={id!}
                 buildings={buildings}
                 onCreateBuilding={createBuildingMutation.mutateAsync}
+                search={buildingSearch}
+                setSearch={setBuildingSearch}
+                filterStatus={buildingFilterStatus}
+                setFilterStatus={setBuildingFilterStatus}
               />
             </TabsContent>
             <TabsContent value="stock">
-              <StockManagement projectId={id!} profileSystems={profileSystem} />
+              <StockManagement
+                projectId={id!}
+                profileSystems={profileSystem}
+                search={stockSearch}
+                setSearch={setStockSearch}
+                filterType={stockFilterType}
+                setFilterType={setStockFilterType}
+                filterSystem={stockFilterSystem}
+                setFilterSystem={setStockFilterSystem}
+              />
             </TabsContent>
             <TabsContent value="settings">
               <ProjectSettings
@@ -244,14 +355,12 @@ export default function ProjectBuilder() {
                 isSaving={updateMutation.isPending}
                 onDelete={handleDelete}
                 onArchive={handleArchive}
-                measurementSystem={measurementSystem}
-                unit={unit}
+                isDeleting={deleteMutation.isPending}
+                isArchiving={updateMutation.isPending}
                 kerfWidth={kerfWidth}
                 optimizationStrategy={optimizationStrategy}
                 profileSystem={profileSystem}
                 lockedSystems={lockedSystems}
-                onMeasurementSystemChange={setMeasurementSystem}
-                onUnitChange={setUnit}
                 onKerfWidthChange={setKerfWidth}
                 onOptimizationStrategyChange={setOptimizationStrategy}
                 onProfileSystemChange={setProfileSystem}
@@ -266,9 +375,21 @@ export default function ProjectBuilder() {
 
 // ─── Stock Tab ────────────────────────────────────────────────────────────────
 
-function StockManagement({ projectId, profileSystems }: { projectId: string; profileSystems: string[] }) {
+function StockManagement({ projectId, profileSystems, search, setSearch, filterType, setFilterType, filterSystem, setFilterSystem }: { 
+  projectId: string;
+  profileSystems: string[];
+  search: string;
+  setSearch: (v: string) => void;
+  filterType: string;
+  setFilterType: (v: string) => void;
+  filterSystem: string;
+  setFilterSystem: (v: string) => void;
+}) {
   const { data: stockEntries, isLoading } = useProjectStock(projectId);
   const { data: stockCatalog } = useStockCatalog(profileSystems);
+  const { fromMM: convertFromMM, toMM: convertToMM, formatLength, unitLabel } = useSettings();
+  const { data: profileTypes } = useProfileTypes();
+  const profileTypeLabel = useProfileTypeLabel();
   const addMutation = useAddStock();
   const updateStockMutation = useUpdateStock();
   const deleteMutation = useDeleteStock();
@@ -280,9 +401,6 @@ function StockManagement({ projectId, profileSystems }: { projectId: string; pro
   const [newLabel, setNewLabel] = useState("");
   const [selectedDefaultId, setSelectedDefaultId] = useState<string | null>(null);
   const [addMode, setAddMode] = useState<"catalog" | "custom">("catalog");
-  const [search, setSearch] = useState("");
-  const [filterType, setFilterType] = useState<string>("all");
-  const [filterSystem, setFilterSystem] = useState<string>("all");
 
   const defaultsForView = useMemo(() => {
     if (!stockCatalog || view === "remnants") return [];
@@ -419,9 +537,7 @@ function StockManagement({ projectId, profileSystems }: { projectId: string; pro
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center py-12">
-        <p className="text-sm text-muted-foreground">Loading stock...</p>
-      </div>
+      <LoadingState label="Loading stock..." />
     );
   }
 
@@ -449,56 +565,6 @@ function StockManagement({ projectId, profileSystems }: { projectId: string; pro
           >
             Remnants
           </button>
-        </div>
-
-        <div className="flex items-center gap-2">
-          <div className="relative">
-            <HugeiconsIcon
-              icon={Search01Icon}
-              size={14}
-              className="absolute left-2 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none"
-            />
-            <Input
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search stock..."
-              className="w-44 pl-7 h-8 text-xs"
-            />
-          </div>
-          <Select
-            value={filterSystem}
-            onValueChange={(v) => setFilterSystem(v ?? "all")}
-          >
-            <SelectTrigger className="w-28 h-8 text-xs gap-1.5">
-              <HugeiconsIcon icon={FilterIcon} size={14} className="text-muted-foreground" />
-              <SelectValue>
-                {filterSystem === "all" ? "All Systems" : filterSystem.charAt(0).toUpperCase() + filterSystem.slice(1)}
-              </SelectValue>
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Systems</SelectItem>
-              {profileSystems.map((s) => (
-                <SelectItem key={s} value={s}>{s.charAt(0).toUpperCase() + s.slice(1)}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Select
-            value={filterType}
-            onValueChange={(v) => setFilterType(v ?? "all")}
-          >
-            <SelectTrigger className="w-32 h-8 text-xs gap-1.5">
-              <HugeiconsIcon icon={FilterIcon} size={14} className="text-muted-foreground" />
-              <SelectValue>
-                {filterType === "all" ? "All Types" : profileTypeLabel(filterType)}
-              </SelectValue>
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Types</SelectItem>
-              {Object.entries(PROFILE_TYPE_LABELS).map(([id, label]) => (
-                <SelectItem key={id} value={id}>{label}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
         </div>
       </div>
 
@@ -563,14 +629,22 @@ function StockManagement({ projectId, profileSystems }: { projectId: string; pro
             >
               <CardHeader className="pb-1">
                 <CardAction>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-6 w-6 p-0 text-muted-foreground hover:text-destructive opacity-0 group-hover:opacity-100"
-                    onClick={() => handleDelete(entry.id)}
-                  >
-                    <HugeiconsIcon icon={Delete02Icon} size={13} />
-                  </Button>
+                  <ConfirmDialog
+                    trigger={
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-6 w-6 p-0 text-muted-foreground hover:text-destructive opacity-0 group-hover:opacity-100"
+                      >
+                        <HugeiconsIcon icon={Delete02Icon} size={13} />
+                      </Button>
+                    }
+                    title="Delete stock entry?"
+                    description="This will permanently remove the stock entry from this project."
+                    confirmLabel="Delete"
+                    isPending={deleteMutation.isPending}
+                    onConfirm={() => handleDelete(entry.id)}
+                  />
                 </CardAction>
                 <CardTitle className="text-sm truncate flex items-center gap-1.5">
                   {entry.isRemnant && (
@@ -606,9 +680,9 @@ function StockManagement({ projectId, profileSystems }: { projectId: string; pro
                         )}
                         <span className="truncate">
                           {def
-                            ? ` · ${profileTypeLabel(def.profileType)} · ${((entry.length ?? def.length) / 100).toFixed(0)} cm`
+                            ? ` · ${profileTypeLabel(def.profileType)} · ${formatLength(entry.length ?? def.length)}`
                             : entry.length != null
-                              ? ` · ${profileTypeLabel(entry.profileType)} · ${(entry.length / 100).toFixed(0)} cm`
+                              ? ` · ${profileTypeLabel(entry.profileType)} · ${formatLength(entry.length)}`
                               : "Custom"}
                         </span>
                       </>
@@ -738,7 +812,7 @@ function StockManagement({ projectId, profileSystems }: { projectId: string; pro
                         return (
                           <SelectItem key={d.id} value={d.id}>
                             <span className="flex items-center gap-2">
-                              {d.label ?? `${d.profileType} ${(d.length / 100).toFixed(0)}cm`}
+                              {d.label ?? `${d.profileType} ${formatLength(d.length)}`}
                               {avail >= 0 && (
                                 <span className={
                                   "text-[10px] " +
@@ -775,7 +849,7 @@ function StockManagement({ projectId, profileSystems }: { projectId: string; pro
               <div className="grid grid-cols-2 gap-3">
                 <div className="flex flex-col gap-1.5">
                   <Label htmlFor="ns-length">
-                    Length (cm)
+                    Length ({unitLabel})
                     {effectiveMode === "catalog" ? (
                       <span className="text-[10px] text-muted-foreground ml-1">(from catalog)</span>
                     ) : (
@@ -786,11 +860,11 @@ function StockManagement({ projectId, profileSystems }: { projectId: string; pro
                     id="ns-length"
                     type="number"
                     min={1}
-                    value={newLength === "" ? "" : newLength / 100}
+                    value={newLength === "" ? "" : convertFromMM(newLength)}
                     disabled={effectiveMode === "catalog"}
                     onChange={(e) => {
                       const val = parseFloat(e.target.value);
-                      setNewLength(isNaN(val) ? "" : val * 100);
+                      setNewLength(isNaN(val) ? "" : convertToMM(val));
                     }}
                     placeholder="e.g. 350"
                   />
@@ -826,7 +900,7 @@ function StockManagement({ projectId, profileSystems }: { projectId: string; pro
             <DialogFooter>
               <Button variant="outline" onClick={() => { setShowCreate(false); resetForm(); }}>Cancel</Button>
               <Button onClick={handleAdd} disabled={addMutation.isPending} className="gap-1.5">
-                <HugeiconsIcon icon={Add01Icon} size={14} />
+                {addMutation.isPending ? <Spinner className="size-4" /> : <HugeiconsIcon icon={Add01Icon} size={14} />}
                 {addMutation.isPending ? "Adding..." : `Add ${view === "remnants" ? "Remnant" : "Stock"}`}
               </Button>
             </DialogFooter>
@@ -840,9 +914,9 @@ function StockManagement({ projectId, profileSystems }: { projectId: string; pro
 // ─── Settings Tab ─────────────────────────────────────────────────────────────
 
 function ProjectSettings({
-  name, client, status, onNameChange, onClientChange, onSave, isSaving, onDelete, onArchive,
-  measurementSystem, unit, kerfWidth, optimizationStrategy, profileSystem, lockedSystems,
-  onMeasurementSystemChange, onUnitChange, onKerfWidthChange, onOptimizationStrategyChange, onProfileSystemChange,
+  name, client, status, onNameChange, onClientChange, onSave, isSaving, onDelete, onArchive, isDeleting, isArchiving,
+  kerfWidth, optimizationStrategy, profileSystem, lockedSystems,
+  onKerfWidthChange, onOptimizationStrategyChange, onProfileSystemChange,
 }: {
   name: string;
   client: string;
@@ -853,18 +927,18 @@ function ProjectSettings({
   isSaving: boolean;
   onDelete: () => void;
   onArchive: () => void;
-  measurementSystem: Project["measurementSystem"];
-  unit: string;
+  isDeleting: boolean;
+  isArchiving: boolean;
   kerfWidth: number;
   optimizationStrategy: Project["optimizationStrategy"];
   profileSystem: string[];
   lockedSystems: Set<string>;
-  onMeasurementSystemChange: (v: Project["measurementSystem"]) => void;
-  onUnitChange: (v: string) => void;
   onKerfWidthChange: (v: number) => void;
   onOptimizationStrategyChange: (v: Project["optimizationStrategy"]) => void;
   onProfileSystemChange: (v: string[]) => void;
 }) {
+  const { unitLabel } = useSettings();
+  const navigate = useNavigate();
   return (
     <div className="flex flex-col gap-4">
       <div className="flex items-stretch gap-4">
@@ -958,45 +1032,12 @@ function ProjectSettings({
             <CardDescription className="text-xs">Cutting optimizer settings for this project.</CardDescription>
           </CardHeader>
           <CardContent className="flex flex-col gap-4">
-            <div className="grid grid-cols-[80px_1fr_50px_1fr] items-center gap-3">
-              <Label className="text-xs text-muted-foreground">Measure</Label>
-              <Select
-                value={measurementSystem}
-                onValueChange={(v) => {
-                  onMeasurementSystemChange(v as Project["measurementSystem"]);
-                  onUnitChange(v === "metric" ? "cm" : "in");
-                }}
-              >
-                <SelectTrigger className="h-7 text-xs w-full">
-                  <SelectValue>
-                    {measurementSystem === "metric" ? "Metric" : "Imperial"}
-                  </SelectValue>
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="metric">Metric</SelectItem>
-                  <SelectItem value="imperial">Imperial</SelectItem>
-                </SelectContent>
-              </Select>
+            <div className="grid grid-cols-[80px_1fr] items-center gap-3">
               <Label className="text-xs text-muted-foreground">Unit</Label>
-              <Select value={unit} onValueChange={(v) => onUnitChange(v ?? "")}>
-                <SelectTrigger className="h-7 text-xs w-full">
-                  <SelectValue>{unit}</SelectValue>
-                </SelectTrigger>
-                <SelectContent>
-                  {measurementSystem === "metric" ? (
-                    <>
-                      <SelectItem value="mm">mm</SelectItem>
-                      <SelectItem value="cm">cm</SelectItem>
-                      <SelectItem value="m">m</SelectItem>
-                    </>
-                  ) : (
-                    <>
-                      <SelectItem value="in">in</SelectItem>
-                      <SelectItem value="ft">ft</SelectItem>
-                    </>
-                  )}
-                </SelectContent>
-              </Select>
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-foreground">{unitLabel}</span>
+                <span className="text-[10px] text-muted-foreground">Set in <button onClick={() => navigate("/settings")} className="underline hover:text-foreground">Settings</button></span>
+              </div>
             </div>
             <Separator />
             <div className="grid grid-cols-[80px_1fr] items-center gap-3">
@@ -1035,10 +1076,11 @@ function ProjectSettings({
       </div>
 
       <div className="flex justify-end">
-        <Button onClick={onSave} disabled={isSaving} className="gap-1.5 w-36 justify-center">
-          <HugeiconsIcon icon={SaveIcon} size={14} />
-          {isSaving ? "Saving..." : "Save Changes"}
-        </Button>
+        <SaveButton
+          onClick={onSave}
+          isPending={isSaving}
+          disabled={false}
+        />
       </div>
       <Card className="border-destructive/20">
         <CardHeader>
@@ -1052,10 +1094,20 @@ function ProjectSettings({
                 <span className="text-xs font-medium">Archive this project</span>
                 <span className="text-xs text-muted-foreground">Mark all buildings as archived and hide from active lists.</span>
               </div>
-              <Button variant="outline" className="gap-1.5 shrink-0 w-36 justify-center" onClick={onArchive} disabled={status === "archived"}>
-                <HugeiconsIcon icon={ArchiveArrowDownIcon} size={14} />
-                Archive Project
-              </Button>
+              <ConfirmDialog
+                trigger={
+                  <Button variant="outline" className="gap-1.5 shrink-0 w-36 justify-center" disabled={status === "archived" || isArchiving}>
+                    <HugeiconsIcon icon={ArchiveArrowDownIcon} size={14} />
+                    Archive Project
+                  </Button>
+                }
+                title="Archive this project?"
+                description="This will mark all buildings as archived and hide them from active lists. You can still find archived projects in the project list."
+                confirmLabel="Archive"
+                variant="default"
+                isPending={isArchiving}
+                onConfirm={onArchive}
+              />
             </div>
             <Separator />
             <div className="flex items-center justify-between gap-3">
@@ -1063,10 +1115,19 @@ function ProjectSettings({
                 <span className="text-xs font-medium">Delete this project</span>
                 <span className="text-xs text-muted-foreground">All buildings, assignments, and piece pools will be lost.</span>
               </div>
-              <Button variant="outline" className="text-destructive hover:bg-destructive/10 hover:text-destructive gap-1.5 shrink-0 w-36 justify-center" onClick={onDelete}>
-                <HugeiconsIcon icon={Delete02Icon} size={14} />
-                Delete Project
-              </Button>
+              <ConfirmDialog
+                trigger={
+                  <Button variant="outline" className="text-destructive hover:bg-destructive/10 hover:text-destructive gap-1.5 shrink-0 w-36 justify-center" disabled={isDeleting}>
+                    <HugeiconsIcon icon={Delete02Icon} size={14} />
+                    Delete Project
+                  </Button>
+                }
+                title="Delete this project?"
+                description="All buildings, assignments, and piece pools will be permanently lost. This action cannot be undone."
+                confirmLabel="Delete"
+                isPending={isDeleting}
+                onConfirm={onDelete}
+              />
             </div>
           </div>
         </CardContent>
@@ -1078,7 +1139,7 @@ function ProjectSettings({
 // ─── Building Detail View ─────────────────────────────────────────────────────
 
 export function BuildingDetail({
-  building, projectId, aptTemplates, projectProfileSystems, existingAssignments, existingSizes, aptTemplateNames, onNext, onPrev, hasNext, hasPrev, onUpdateBuilding, onDeleteBuilding, canDelete,
+  building, projectId, aptTemplates, projectProfileSystems, existingAssignments, existingSizes, aptTemplateNames, onNext, onPrev, hasNext, hasPrev, onUpdateBuilding, onDeleteBuilding, canDelete, isDeletingBuilding,
 }: {
   building: BuildingLike;
   projectId: string;
@@ -1091,9 +1152,10 @@ export function BuildingDetail({
   onPrev?: () => void;
   hasNext?: boolean;
   hasPrev?: boolean;
-  onUpdateBuilding: (args: { projectId: string; buildingId: string; data: { name?: string; floors?: number; apartmentsPerFloor?: number; apartmentLabels?: string[]; status?: BuildingLike["status"] } }) => Promise<any>;
+  onUpdateBuilding: (args: { projectId: string; buildingId: string; data: { name?: string; floors?: number; apartmentsPerFloor?: number; floorLabels?: string[]; status?: BuildingLike["status"] } }) => Promise<any>;
   onDeleteBuilding: (args: { projectId: string; buildingId: string }) => Promise<any>;
   canDelete: boolean;
+  isDeletingBuilding: boolean;
 }) {
   const [subTab, setSubTab] = useState("assignments");
 
@@ -1170,6 +1232,7 @@ export function BuildingDetail({
             onUpdateBuilding={onUpdateBuilding}
             onDeleteBuilding={onDeleteBuilding}
             canDelete={canDelete}
+            isDeletingBuilding={isDeletingBuilding}
           />
         </TabsContent>
       </Tabs>
@@ -1187,33 +1250,34 @@ const buildingStatusOptions = [
 ];
 
 function BuildingSettings({
-  building, projectId, onUpdateBuilding, onDeleteBuilding, canDelete,
+  building, projectId, onUpdateBuilding, onDeleteBuilding, canDelete, isDeletingBuilding,
 }: {
   building: BuildingLike;
   projectId: string;
-  onUpdateBuilding: (args: { projectId: string; buildingId: string; data: { name?: string; floors?: number; apartmentsPerFloor?: number; apartmentLabels?: string[]; status?: BuildingLike["status"] } }) => Promise<any>;
+  onUpdateBuilding: (args: { projectId: string; buildingId: string; data: { name?: string; floors?: number; apartmentsPerFloor?: number; floorLabels?: string[]; status?: BuildingLike["status"] } }) => Promise<any>;
   onDeleteBuilding: (args: { projectId: string; buildingId: string }) => Promise<any>;
   canDelete: boolean;
+  isDeletingBuilding: boolean;
 }) {
   const [name, setName] = useState(building.name);
   const [floors, setFloors] = useState(building.floors);
   const [apts, setApts] = useState(building.apartmentsPerFloor);
   const [status, setStatus] = useState<BuildingLike["status"]>(building.status);
-  let initLabels: string[] = [];
-  try { initLabels = JSON.parse(building.apartmentLabels); } catch { initLabels = []; }
-  const [labels, setLabels] = useState<string[]>(initLabels);
+  let initFloorLabels: string[] = [];
+  try { initFloorLabels = JSON.parse(building.floorLabels); } catch { initFloorLabels = []; }
+  const [floorLabels, setFloorLabels] = useState<string[]>(initFloorLabels);
   const [saving, setSaving] = useState(false);
 
-  const updateLabel = (i: number, v: string) => {
-    const arr = [...labels];
+  const updateFloorLabel = (i: number, v: string) => {
+    const arr = [...floorLabels];
     arr[i] = v;
-    setLabels(arr);
+    setFloorLabels(arr);
   };
 
   const handleSave = async () => {
     setSaving(true);
     try {
-      await onUpdateBuilding({ projectId, buildingId: building.id, data: { name, floors, apartmentsPerFloor: apts, apartmentLabels: labels, status } });
+      await onUpdateBuilding({ projectId, buildingId: building.id, data: { name, floors, apartmentsPerFloor: apts, floorLabels, status } });
     } finally {
       setSaving(false);
     }
@@ -1245,10 +1309,10 @@ function BuildingSettings({
           </div>
           <Separator />
           <div className="grid grid-cols-[120px_1fr] items-start gap-3">
-            <Label className="text-xs text-muted-foreground pt-1.5">Apt Labels</Label>
+            <Label className="text-xs text-muted-foreground pt-1.5">Floor Labels</Label>
             <div className="flex flex-wrap gap-1.5">
-              {Array.from({ length: apts }, (_, i) => (
-                <Input key={i} value={labels[i] ?? String.fromCharCode(65 + i)} onChange={(e) => updateLabel(i, e.target.value)} className="w-14 h-8 text-center text-xs" />
+              {Array.from({ length: floors }, (_, i) => (
+                <Input key={i} value={floorLabels[i] ?? String.fromCharCode(65 + i)} onChange={(e) => updateFloorLabel(i, e.target.value)} className="w-14 h-8 text-center text-xs" />
               ))}
             </div>
           </div>
@@ -1269,10 +1333,11 @@ function BuildingSettings({
             </Select>
           </div>
           <div className="flex justify-end">
-            <Button onClick={handleSave} disabled={saving || !name.trim()} className="gap-1.5 w-36 justify-center">
-              <HugeiconsIcon icon={SaveIcon} size={14} />
-              {saving ? "Saving..." : "Save Changes"}
-            </Button>
+            <SaveButton
+              onClick={handleSave}
+              isPending={saving}
+              disabled={!name.trim()}
+            />
           </div>
         </CardContent>
       </Card>
@@ -1288,10 +1353,19 @@ function BuildingSettings({
                 <span className="text-xs font-medium">Delete this building</span>
                 <span className="text-xs text-muted-foreground">All floor assignments, opening sizes, and piece pools for this building will be lost.</span>
               </div>
-              <Button variant="outline" className="text-destructive hover:bg-destructive/10 hover:text-destructive gap-1.5 shrink-0 w-36 justify-center" onClick={() => onDeleteBuilding({ projectId, buildingId: building.id })}>
-                <HugeiconsIcon icon={Delete02Icon} size={14} />
-                Delete Building
-              </Button>
+              <ConfirmDialog
+                trigger={
+                  <Button variant="outline" className="text-destructive hover:bg-destructive/10 hover:text-destructive gap-1.5 shrink-0 w-36 justify-center" disabled={isDeletingBuilding}>
+                    <HugeiconsIcon icon={Delete02Icon} size={14} />
+                    Delete Building
+                  </Button>
+                }
+                title="Delete this building?"
+                description="All floor assignments, opening sizes, and piece pools for this building will be permanently lost. This action cannot be undone."
+                confirmLabel="Delete"
+                isPending={isDeletingBuilding}
+                onConfirm={() => onDeleteBuilding({ projectId, buildingId: building.id })}
+              />
             </div>
           </CardContent>
         </Card>
@@ -1307,40 +1381,48 @@ export interface BuildingLike {
   name: string;
   floors: number;
   apartmentsPerFloor: number;
-  apartmentLabels: string;
+  floorLabels: string; // JSON array of floor labels (e.g. ["A","B","C"])
   sortOrder: number;
   status: "draft" | "active" | "completed" | "archived";
   createdAt: number;
 }
 
 function BuildingsManager({
-  projectId, buildings, onCreateBuilding,
+  projectId, buildings, onCreateBuilding, search, setSearch, filterStatus, setFilterStatus,
 }: {
   projectId: string;
   buildings: BuildingLike[];
-  onCreateBuilding: (args: { projectId: string; data: { name: string; floors?: number; apartmentsPerFloor?: number; apartmentLabels?: string[] } }) => Promise<any>;
+  onCreateBuilding: (args: { projectId: string; data: { name: string; floors?: number; apartmentsPerFloor?: number; floorLabels?: string[] } }) => Promise<any>;
+  search: string;
+  setSearch: (v: string) => void;
+  filterStatus: string;
+  setFilterStatus: (v: string) => void;
 }) {
   const navigate = useNavigate();
   const [showCreate, setShowCreate] = useState(false);
   const [newName, setNewName] = useState("");
   const [newFloors, setNewFloors] = useState(6);
   const [newApts, setNewApts] = useState(4);
-  const [newLabels, setNewLabels] = useState<string[]>(["A", "B", "C", "D"]);
-  const [search, setSearch] = useState("");
-  const [filterStatus, setFilterStatus] = useState<string>("all");
+  const [newFloorLabels, setNewFloorLabels] = useState<string[]>(["A", "B", "C", "D", "E", "F"]);
+  const [isCreating, setIsCreating] = useState(false);
 
-  const updateNewLabel = (i: number, v: string) => {
-    const arr = [...newLabels];
+  const updateNewFloorLabel = (i: number, v: string) => {
+    const arr = [...newFloorLabels];
     arr[i] = v;
-    setNewLabels(arr);
+    setNewFloorLabels(arr);
   };
 
   const handleCreate = async () => {
     if (!newName.trim()) return;
-    const labels = Array.from({ length: newApts }, (_, i) => newLabels[i] ?? String.fromCharCode(65 + i));
-    await onCreateBuilding({ projectId, data: { name: newName, floors: newFloors, apartmentsPerFloor: newApts, apartmentLabels: labels } });
-    setShowCreate(false);
-    setNewName("");
+    const labels = Array.from({ length: newFloors }, (_, i) => newFloorLabels[i] ?? String.fromCharCode(65 + i));
+    setIsCreating(true);
+    try {
+      await onCreateBuilding({ projectId, data: { name: newName, floors: newFloors, apartmentsPerFloor: newApts, floorLabels: labels } });
+      setShowCreate(false);
+      setNewName("");
+    } finally {
+      setIsCreating(false);
+    }
   };
 
   const filtered = useMemo(() => {
@@ -1357,41 +1439,6 @@ function BuildingsManager({
 
   return (
     <div className="flex flex-col gap-3">
-      {buildings.length > 0 && (
-        <div className="flex items-center justify-end gap-2">
-          <div className="relative">
-            <HugeiconsIcon
-              icon={Search01Icon}
-              size={14}
-              className="absolute left-2 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none"
-            />
-            <Input
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search buildings..."
-              className="w-44 pl-7 h-8 text-xs"
-            />
-          </div>
-          <Select
-            value={filterStatus}
-            onValueChange={(v) => setFilterStatus(v ?? "all")}
-          >
-            <SelectTrigger className="w-32 h-8 text-xs gap-1.5">
-              <HugeiconsIcon icon={FilterIcon} size={14} className="text-muted-foreground" />
-              <SelectValue>
-                {filterStatus === "all" ? "All Status" : filterStatus.charAt(0).toUpperCase() + filterStatus.slice(1)}
-              </SelectValue>
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Status</SelectItem>
-              {buildingStatusOptions.map((opt) => (
-                <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-      )}
-
       {buildings.length === 0 ? (
         <Empty>
           <EmptyHeader>
@@ -1477,7 +1524,7 @@ function BuildingsManager({
 
       {showCreate && (
         <Dialog open={true} onOpenChange={setShowCreate}>
-          <DialogContent className="max-w-md">
+          <DialogContent className="sm:max-w-lg">
             <DialogHeader>
               <DialogTitle>New Building</DialogTitle>
             </DialogHeader>
@@ -1500,7 +1547,7 @@ function BuildingsManager({
               </div>
               <div className="flex flex-col gap-1.5">
                 <div className="flex items-center gap-1.5">
-                  <Label>Apartment Labels</Label>
+                  <Label>Floor Labels</Label>
                   <Tooltip>
                     <TooltipTrigger render={<span className="inline-flex items-center text-muted-foreground cursor-help" />}>
                       <HugeiconsIcon icon={InformationSquareIcon} size={14} />
@@ -1509,15 +1556,20 @@ function BuildingsManager({
                   </Tooltip>
                 </div>
                 <div className="flex flex-wrap gap-1.5">
-                  {Array.from({ length: newApts }, (_, i) => (
-                    <Input key={i} value={newLabels[i] ?? String.fromCharCode(65 + i)} onChange={(e) => updateNewLabel(i, e.target.value)} className="w-14 h-8 text-center text-xs" />
+                  {Array.from({ length: newFloors }, (_, i) => (
+                    <Input key={i} value={newFloorLabels[i] ?? String.fromCharCode(65 + i)} onChange={(e) => updateNewFloorLabel(i, e.target.value)} className="w-14 h-8 text-center text-xs" />
                   ))}
                 </div>
               </div>
             </div>
             <DialogFooter>
-              <Button variant="ghost" onClick={() => setShowCreate(false)}>Cancel</Button>
-              <Button onClick={handleCreate} disabled={!newName.trim()}>Create</Button>
+              <SaveButton
+                onClick={handleCreate}
+                isPending={isCreating}
+                isCreate
+                disabled={!newName.trim()}
+                onCancel={() => setShowCreate(false)}
+              />
             </DialogFooter>
           </DialogContent>
         </Dialog>
@@ -1544,8 +1596,8 @@ function FloorAssignments({
   const saveMutation = useSaveAssignments();
   const floors = building.floors;
   const apartmentsPerFloor = building.apartmentsPerFloor;
-  let apartmentLabels: string[] = [];
-  try { apartmentLabels = JSON.parse(building.apartmentLabels); } catch { apartmentLabels = []; }
+  let floorLabels: string[] = [];
+  try { floorLabels = JSON.parse(building.floorLabels); } catch { floorLabels = []; }
 
   const templateNameMap = useMemo(() => {
     const m: Record<string, string> = {};
@@ -1658,7 +1710,7 @@ function FloorAssignments({
               <TableHead className="h-9 text-xs w-24 font-semibold">{building.name}</TableHead>
               {Array.from({ length: apartmentsPerFloor }, (_, i) => (
                 <TableHead key={i} className="h-9 text-xs text-center font-semibold">
-                  Apartment {apartmentLabels[i] ?? String.fromCharCode(65 + i)}
+                  Apartment {i + 1}
                 </TableHead>
               ))}
             </TableRow>
@@ -1666,7 +1718,7 @@ function FloorAssignments({
           <TableBody>
             {Array.from({ length: floors }, (_, f) => (
               <TableRow key={f} className="group">
-                <TableCell className="text-xs font-medium py-1.5 text-muted-foreground group-hover:text-foreground">Floor {f + 1}</TableCell>
+                <TableCell className="text-xs font-medium py-1.5 text-muted-foreground group-hover:text-foreground">Floor {floorLabels[f] ?? String.fromCharCode(65 + f)}</TableCell>
                 {Array.from({ length: apartmentsPerFloor }, (_, i) => (
                   <TableCell key={i} className="py-3 px-4 text-center">
                     <Select
@@ -1718,7 +1770,7 @@ function FloorAssignments({
               Reset
             </Button>
             <Button className="gap-1.5 h-7" onClick={handleSave} disabled={saveMutation.isPending}>
-              <HugeiconsIcon icon={SaveIcon} size={14} />
+              {saveMutation.isPending ? <Spinner className="size-3.5" /> : <HugeiconsIcon icon={SaveIcon} size={14} />}
               {saveMutation.isPending ? "Saving..." : "Save"}
             </Button>
           </div>
@@ -1743,13 +1795,14 @@ function OpeningSizes({
   hasNext?: boolean;
 }) {
   const saveMutation = useSaveOpeningSizes();
+  const { fromMM: convertFromMM, toMM: convertToMM, unitLabel } = useSettings();
   const floors = building.floors;
   const apartmentsPerFloor = building.apartmentsPerFloor;
-  let apartmentLabels: string[] = [];
-  try { apartmentLabels = JSON.parse(building.apartmentLabels); } catch { apartmentLabels = []; }
+  let floorLabels: string[] = [];
+  try { floorLabels = JSON.parse(building.floorLabels); } catch { floorLabels = []; }
 
   const [sizes, setSizes] = useState<SizeGrid>({});
-  const [activeOpeningId, setActiveOpeningId] = useState<string | null>(null);
+  const [activeGroupId, setActiveGroupId] = useState<string | null>(null);
 
   // Build a map of apartment template → openings
   const assignmentMap = useMemo(() => {
@@ -1773,32 +1826,35 @@ function OpeningSizes({
   const templateQueries = useQueries({
     queries: usedTemplateIds.map((tplId) => ({
       queryKey: ["apartment-template", tplId],
-      queryFn: () => apiFetch<{ openings: { id: string; label: string }[] }>(`/api/apartment-templates/${tplId}`),
+      queryFn: () => apiFetch<{ openings: { id: string; label: string; pieceTemplateId: string; templateName: string }[] }>(`/api/apartment-templates/${tplId}`),
       enabled: !!tplId,
     })),
   });
 
   const templateOpeningsMap = useMemo(() => {
-    const m: Record<string, { id: string; label: string }[]> = {};
+    const m: Record<string, { id: string; label: string; pieceTemplateId: string; templateName: string }[]> = {};
     usedTemplateIds.forEach((tplId, i) => {
       const q = templateQueries[i];
       if (q?.data?.openings) {
-        m[tplId] = q.data.openings.map((o) => ({ id: o.id, label: o.label }));
+        m[tplId] = q.data.openings.map((o) => ({ id: o.id, label: o.label, pieceTemplateId: o.pieceTemplateId, templateName: o.templateName }));
       }
     });
     return m;
   }, [templateQueries, usedTemplateIds]);
 
-  // All opening instances across all used templates
-  const allOpenings = useMemo(() => {
-    const list: { id: string; label: string; templateName: string }[] = [];
+  // All opening instances across all used templates, grouped by pieceTemplateId
+  const allGroups = useMemo(() => {
+    const groupMap = new Map<string, { pieceTemplateId: string; pieceTemplateName: string; openings: { id: string; label: string; aptTemplateName: string }[] }>();
     for (const [tplId, openings] of Object.entries(templateOpeningsMap)) {
-      const tplName = aptTemplateNames[tplId] ?? "Unknown";
+      const aptTplName = aptTemplateNames[tplId] ?? "Unknown";
       for (const o of openings) {
-        list.push({ id: o.id, label: o.label, templateName: tplName });
+        if (!groupMap.has(o.pieceTemplateId)) {
+          groupMap.set(o.pieceTemplateId, { pieceTemplateId: o.pieceTemplateId, pieceTemplateName: o.templateName, openings: [] });
+        }
+        groupMap.get(o.pieceTemplateId)!.openings.push({ id: o.id, label: o.label, aptTemplateName: aptTplName });
       }
     }
-    return list;
+    return Array.from(groupMap.values());
   }, [templateOpeningsMap, aptTemplateNames]);
 
   // Load existing sizes into state
@@ -1806,19 +1862,19 @@ function OpeningSizes({
     const g: SizeGrid = {};
     for (const s of existingSizes) {
       g[`${s.apartmentTemplateOpeningId}_${s.floor}_${s.apartmentIndex}`] = {
-        width: String(s.width / 100),
-        height: String(s.height / 100),
+        width: String(convertFromMM(s.width)),
+        height: String(convertFromMM(s.height)),
       };
     }
     setSizes(g);
-  }, [existingSizes]);
+  }, [existingSizes, convertFromMM]);
 
-  // Auto-select first opening
+  // Auto-select first group
   useEffect(() => {
-    if (!activeOpeningId && allOpenings.length > 0) {
-      setActiveOpeningId(allOpenings[0].id);
+    if (!activeGroupId && allGroups.length > 0) {
+      setActiveGroupId(allGroups[0].pieceTemplateId);
     }
-  }, [allOpenings, activeOpeningId]);
+  }, [allGroups, activeGroupId]);
 
   const handleCellChange = (openingId: string, floor: number, aptIndex: number, field: "width" | "height", value: string) => {
     const key = `${openingId}_${floor}_${aptIndex}`;
@@ -1828,7 +1884,10 @@ function OpeningSizes({
     }));
   };
 
-  const handleFillAll = (openingId: string, width: string, height: string) => {
+  const handleFillAll = (groupPieceTemplateId: string, width: string, height: string) => {
+    const group = allGroups.find((g) => g.pieceTemplateId === groupPieceTemplateId);
+    if (!group) return;
+    const openingIds = new Set(group.openings.map((o) => o.id));
     setSizes((s) => {
       const newS = { ...s };
       for (let f = 0; f < floors; f++) {
@@ -1836,8 +1895,10 @@ function OpeningSizes({
           const aptTplId = assignmentMap[`${f}_${i}`];
           if (!aptTplId) continue;
           const openings = templateOpeningsMap[aptTplId] ?? [];
-          if (openings.some((o) => o.id === openingId)) {
-            newS[`${openingId}_${f}_${i}`] = { width, height };
+          for (const o of openings) {
+            if (openingIds.has(o.id)) {
+              newS[`${o.id}_${f}_${i}`] = { width, height };
+            }
           }
         }
       }
@@ -1845,21 +1906,35 @@ function OpeningSizes({
     });
   };
 
-  const handleFillBucket = (openingId: string, width: string, height: string, cells: { floor: number; aptIndex: number }[]) => {
+  const handleFillBucket = (groupPieceTemplateId: string, width: string, height: string, cells: { floor: number; aptIndex: number }[]) => {
+    const group = allGroups.find((g) => g.pieceTemplateId === groupPieceTemplateId);
+    if (!group) return;
+    const openingIds = new Set(group.openings.map((o) => o.id));
     setSizes((s) => {
       const newS = { ...s };
       for (const { floor, aptIndex } of cells) {
-        newS[`${openingId}_${floor}_${aptIndex}`] = { width, height };
+        const aptTplId = assignmentMap[`${floor}_${aptIndex}`];
+        if (!aptTplId) continue;
+        const openings = templateOpeningsMap[aptTplId] ?? [];
+        for (const o of openings) {
+          if (openingIds.has(o.id)) {
+            newS[`${o.id}_${floor}_${aptIndex}`] = { width, height };
+          }
+        }
       }
       return newS;
     });
   };
 
-  const handleClearAll = (openingId: string) => {
+  const handleClearAll = (groupPieceTemplateId: string) => {
+    const group = allGroups.find((g) => g.pieceTemplateId === groupPieceTemplateId);
+    if (!group) return;
+    const openingIds = new Set(group.openings.map((o) => o.id));
     setSizes((s) => {
       const newS = { ...s };
       for (const key of Object.keys(newS)) {
-        if (key.startsWith(`${openingId}_`)) {
+        const openingId = key.split("_")[0];
+        if (openingIds.has(openingId)) {
           delete newS[key];
         }
       }
@@ -1871,8 +1946,8 @@ function OpeningSizes({
     const g: SizeGrid = {};
     for (const s of existingSizes) {
       g[`${s.apartmentTemplateOpeningId}_${s.floor}_${s.apartmentIndex}`] = {
-        width: String(s.width / 100),
-        height: String(s.height / 100),
+        width: String(convertFromMM(s.width)),
+        height: String(convertFromMM(s.height)),
       };
     }
     setSizes(g);
@@ -1889,8 +1964,8 @@ function OpeningSizes({
         apartmentTemplateOpeningId: openingId,
         floor: parseInt(floor),
         apartmentIndex: parseInt(aptIndex),
-        width: w * 100,
-        height: h * 100,
+        width: convertToMM(w),
+        height: convertToMM(h),
       });
     }
     await saveMutation.mutateAsync({ projectId, buildingId: building.id, sizes: sizesArr });
@@ -1906,15 +1981,13 @@ function OpeningSizes({
     );
   }
 
-  if (isLoadingOpenings || allOpenings.length === 0) {
+  if (isLoadingOpenings || allGroups.length === 0) {
     return (
-      <div className="text-center text-sm text-muted-foreground py-8">
-        {isLoadingOpenings ? "Loading openings..." : "No openings found on assigned templates. Add openings to your apartment types first."}
-      </div>
+      <LoadingState label={isLoadingOpenings ? "Loading openings..." : "No openings found on assigned templates. Add openings to your apartment types first."} />
     );
   }
 
-  const activeOpening = allOpenings.find((o) => o.id === activeOpeningId);
+  const activeGroup = allGroups.find((g) => g.pieceTemplateId === activeGroupId);
 
   return (
     <div className="flex flex-col gap-3">
@@ -1933,13 +2006,14 @@ function OpeningSizes({
         </span>
       </div>
 
-      {activeOpening && (
+      {activeGroup && (
         <OpeningSizeGrid
-          openingId={activeOpening.id}
-          openingLabel={activeOpening.label}
+          groupPieceTemplateId={activeGroup.pieceTemplateId}
+          groupLabel={activeGroup.pieceTemplateName}
+          groupOpenings={activeGroup.openings}
           floors={floors}
           apartmentsPerFloor={apartmentsPerFloor}
-          apartmentLabels={apartmentLabels}
+          floorLabels={floorLabels}
           assignmentMap={assignmentMap}
           templateOpeningsMap={templateOpeningsMap}
           sizes={sizes}
@@ -1947,20 +2021,20 @@ function OpeningSizes({
           onFillAll={handleFillAll}
           onFillBucket={handleFillBucket}
           onClearAll={handleClearAll}
-          openingChips={
+          groupChips={
             <div className="inline-flex items-center gap-0.5 rounded-md bg-muted p-0.5">
-              {allOpenings.map((o) => (
+              {allGroups.map((g) => (
                 <button
-                  key={o.id}
+                  key={g.pieceTemplateId}
                   type="button"
                   className={`px-3 py-1 text-xs font-medium rounded-md transition-all ${
-                    activeOpeningId === o.id
+                    activeGroupId === g.pieceTemplateId
                       ? "bg-background text-foreground shadow-sm"
                       : "text-muted-foreground hover:text-foreground"
                   }`}
-                  onClick={() => setActiveOpeningId(o.id)}
+                  onClick={() => setActiveGroupId(g.pieceTemplateId)}
                 >
-                  {o.label}
+                  {g.pieceTemplateName}
                 </button>
               ))}
             </div>
@@ -1974,8 +2048,8 @@ function OpeningSizes({
               Reset
             </Button>
             <Button className="gap-1.5" onClick={handleSave} disabled={saveMutation.isPending}>
-              <HugeiconsIcon icon={SaveIcon} size={14} />
-              {saveMutation.isPending ? "Saving..." : "Save Sizes"}
+              {saveMutation.isPending ? <Spinner className="size-4" /> : <HugeiconsIcon icon={SaveIcon} size={14} />}
+              {saveMutation.isPending ? "Saving..." : "Save"}
             </Button>
           </div>
       </div>
@@ -1984,38 +2058,45 @@ function OpeningSizes({
 }
 
 function OpeningSizeGrid({
-  openingId, openingLabel, floors, apartmentsPerFloor, apartmentLabels,
-  assignmentMap, templateOpeningsMap, sizes, onCellChange, onFillAll, onFillBucket, onClearAll, openingChips,
+  groupPieceTemplateId, groupLabel, groupOpenings, floors, apartmentsPerFloor, floorLabels,
+  assignmentMap, templateOpeningsMap, sizes, onCellChange, onFillAll, onFillBucket, onClearAll, groupChips,
 }: {
-  openingId: string;
-  openingLabel: string;
+  groupPieceTemplateId: string;
+  groupLabel: string;
+  groupOpenings: { id: string; label: string; aptTemplateName: string }[];
   floors: number;
   apartmentsPerFloor: number;
-  apartmentLabels: string[];
+  floorLabels: string[];
   assignmentMap: Record<string, string | null>;
-  templateOpeningsMap: Record<string, { id: string; label: string }[]>;
+  templateOpeningsMap: Record<string, { id: string; label: string; pieceTemplateId: string; templateName: string }[]>;
   sizes: SizeGrid;
   onCellChange: (openingId: string, floor: number, aptIndex: number, field: "width" | "height", value: string) => void;
-  onFillAll: (openingId: string, width: string, height: string) => void;
-  onFillBucket: (openingId: string, width: string, height: string, cells: { floor: number; aptIndex: number }[]) => void;
-  onClearAll: (openingId: string) => void;
-  openingChips: ReactNode;
+  onFillAll: (groupPieceTemplateId: string, width: string, height: string) => void;
+  onFillBucket: (groupPieceTemplateId: string, width: string, height: string, cells: { floor: number; aptIndex: number }[]) => void;
+  onClearAll: (groupPieceTemplateId: string) => void;
+  groupChips: ReactNode;
 }) {
   const [bulkW, setBulkW] = useState("");
   const [bulkH, setBulkH] = useState("");
+  const [thresholdInput, setThresholdInput] = useState("1.5");
+  const { unitLabel, fromMM, toMM } = useSettings();
 
-  // Determine which cells should show this opening
-  const cellHasOpening = (floor: number, aptIndex: number) => {
+  // BUCKET_SIZE: convert threshold from display unit to mm
+  const BUCKET_SIZE = toMM(parseFloat(thresholdInput) || 1.5);
+
+  // Set of opening IDs in this group
+  const groupOpeningIds = useMemo(() => new Set(groupOpenings.map((o) => o.id)), [groupOpenings]);
+
+  // For a given cell, return the openings from this group that exist in that apartment template
+  const cellOpenings = (floor: number, aptIndex: number) => {
     const aptTplId = assignmentMap[`${floor}_${aptIndex}`];
-    if (!aptTplId) return false;
+    if (!aptTplId) return [];
     const openings = templateOpeningsMap[aptTplId] ?? [];
-    return openings.some((o) => o.id === openingId);
+    return openings.filter((o) => groupOpeningIds.has(o.id));
   };
 
   // Half-bucket overlap: assign each cell to two offset buckets per dimension,
-  // then union all buckets a cell belongs to. Guarantees values within 1.5cm share a color.
-  const BUCKET_SIZE = 1.5;
-  const HALF_BUCKET = BUCKET_SIZE / 2;
+  // then union all buckets a cell belongs to. Guarantees values within the threshold share a color.
   const CELL_TINTS = [
     "ring-blue-400/50",
     "ring-green-400/50",
@@ -2038,107 +2119,118 @@ function OpeningSizeGrid({
   ];
 
   const { tintMap: cellTintMap, bucketGroups } = useMemo(() => {
-    // Union-find structure
-    const parent = new Map<string, string>();
-    const find = (x: string): string => {
-      if (!parent.has(x)) parent.set(x, x);
-      let root = x;
-      while (parent.get(root) !== root) root = parent.get(root)!;
-      // Path compression
-      let curr = x;
-      while (parent.get(curr) !== root) {
-        const next = parent.get(curr)!;
-        parent.set(curr, root);
-        curr = next;
-      }
-      return root;
-    };
-    const union = (a: string, b: string) => {
-      const ra = find(a), rb = find(b);
-      if (ra !== rb) parent.set(ra, rb);
-    };
+    // Complete-linkage clustering: merge groups only if max distance between any pair ≤ BUCKET_SIZE.
+    // This guarantees no transitive chaining — each group's diameter is always ≤ BUCKET_SIZE.
 
-    // For each cell, compute 4 bucket keys (2 per dimension: floor and floor+half offset)
-    // and union them together
-    const cellBuckets: Record<string, string[]> = {};
+    // Collect all cells with their values (convert to mm for distance calculation)
+    const cells: { key: string; floor: number; aptIndex: number; w: number; h: number }[] = [];
     for (let f = 0; f < floors; f++) {
       for (let i = 0; i < apartmentsPerFloor; i++) {
-        const key = `${openingId}_${f}_${i}`;
-        const cell = sizes[key];
-        if (!cell || !cell.width || !cell.height) continue;
-        const w = parseFloat(cell.width);
-        const h = parseFloat(cell.height);
-        if (isNaN(w) || isNaN(h)) continue;
-        const wB1 = Math.floor(w / BUCKET_SIZE);
-        const wB2 = Math.floor((w + HALF_BUCKET) / BUCKET_SIZE);
-        const hB1 = Math.floor(h / BUCKET_SIZE);
-        const hB2 = Math.floor((h + HALF_BUCKET) / BUCKET_SIZE);
-        const buckets = [
-          `${wB1}_${hB1}`, `${wB1}_${hB2}`,
-          `${wB2}_${hB1}`, `${wB2}_${hB2}`,
-        ];
-        cellBuckets[key] = buckets;
-        for (let b = 1; b < buckets.length; b++) union(buckets[0], buckets[b]);
+        for (const openingId of groupOpeningIds) {
+          const key = `${openingId}_${f}_${i}`;
+          const cell = sizes[key];
+          if (!cell || !cell.width || !cell.height) continue;
+          const w = toMM(parseFloat(cell.width));
+          const h = toMM(parseFloat(cell.height));
+          if (isNaN(w) || isNaN(h)) continue;
+          cells.push({ key, floor: f, aptIndex: i, w, h });
+        }
       }
     }
 
-    // Union cells that share any bucket
-    const bucketToCells = new Map<string, string[]>();
-    for (const [cellKey, buckets] of Object.entries(cellBuckets)) {
-      for (const b of buckets) {
-        if (!bucketToCells.has(b)) bucketToCells.set(b, []);
-        bucketToCells.get(b)!.push(cellKey);
-      }
+    if (cells.length === 0) {
+      return { tintMap: {}, bucketGroups: [] };
     }
-    for (const cells of bucketToCells.values()) {
-      for (let c = 1; c < cells.length; c++) {
-        union(cellBuckets[cells[0]][0], cellBuckets[cells[c]][0]);
+
+    // Initialize each cell as its own cluster
+    const clusters: { key: string; floor: number; aptIndex: number; w: number; h: number }[][] = cells.map(c => [c]);
+
+    // Max-norm distance: group if both width and height differences are within threshold
+    const maxNormDist = (a: { w: number; h: number }, b: { w: number; h: number }) =>
+      Math.max(Math.abs(a.w - b.w), Math.abs(a.h - b.h));
+
+    // Euclidean distance for tie-breaking when max-norm distances are equal
+    const euclideanDist = (a: { w: number; h: number }, b: { w: number; h: number }) =>
+      Math.sqrt((a.w - b.w) ** 2 + (a.h - b.h) ** 2);
+
+    // Complete-linkage distance between two clusters (max distance between any pair)
+    const clusterDist = (c1: typeof cells, c2: typeof cells) => {
+      let maxD = 0;
+      for (const a of c1) {
+        for (const b of c2) {
+          const d = maxNormDist(a, b);
+          if (d > maxD) maxD = d;
+        }
+      }
+      return maxD;
+    };
+
+    // Greedy complete-linkage: repeatedly merge the closest pair
+    let merged = true;
+    while (merged && clusters.length > 1) {
+      merged = false;
+      let bestI = -1, bestJ = -1, bestDist = Infinity, bestEuclidean = Infinity;
+
+      for (let i = 0; i < clusters.length; i++) {
+        for (let j = i + 1; j < clusters.length; j++) {
+          const d = clusterDist(clusters[i], clusters[j]);
+          // Tie-break with Euclidean distance between cluster centers
+          const centerA = {
+            w: clusters[i].reduce((s, c) => s + c.w, 0) / clusters[i].length,
+            h: clusters[i].reduce((s, c) => s + c.h, 0) / clusters[i].length,
+          };
+          const centerB = {
+            w: clusters[j].reduce((s, c) => s + c.w, 0) / clusters[j].length,
+            h: clusters[j].reduce((s, c) => s + c.h, 0) / clusters[j].length,
+          };
+          const euc = euclideanDist(centerA, centerB);
+          if (d < bestDist || (d === bestDist && euc < bestEuclidean)) {
+            bestDist = d;
+            bestEuclidean = euc;
+            bestI = i;
+            bestJ = j;
+          }
+        }
+      }
+
+      if (bestI >= 0 && bestDist <= BUCKET_SIZE) {
+        // Merge clusters
+        clusters[bestI] = [...clusters[bestI], ...clusters[bestJ]];
+        clusters.splice(bestJ, 1);
+        merged = true;
       }
     }
 
-    // Assign colors by root and collect bucket groups
-    const rootColorMap = new Map<string, number>();
-    const rootCellsMap = new Map<string, { floor: number; aptIndex: number; w: number; h: number }[]>();
-    let colorIdx = 0;
+    // Assign colors to clusters
     const tintMap: Record<string, string> = {};
-    for (const [cellKey, buckets] of Object.entries(cellBuckets)) {
-      const root = find(buckets[0]);
-      if (!rootColorMap.has(root)) {
-        rootColorMap.set(root, colorIdx % CELL_TINTS.length);
-        colorIdx++;
+    const bucketGroups = clusters.map((cluster, idx) => {
+      const colorIdx = idx % CELL_TINTS.length;
+      const tint = CELL_TINTS[colorIdx];
+      const avgW = (cluster.reduce((s, c) => s + c.w, 0) / cluster.length).toFixed(1);
+      const avgH = (cluster.reduce((s, c) => s + c.h, 0) / cluster.length).toFixed(1);
+      for (const c of cluster) {
+        tintMap[c.key] = tint;
       }
-      tintMap[cellKey] = CELL_TINTS[rootColorMap.get(root)!];
-      const parts = cellKey.split("_");
-      const f = parseInt(parts[1]);
-      const i = parseInt(parts[2]);
-      const cell = sizes[cellKey]!;
-      if (!rootCellsMap.has(root)) rootCellsMap.set(root, []);
-      rootCellsMap.get(root)!.push({ floor: f, aptIndex: i, w: parseFloat(cell.width), h: parseFloat(cell.height) });
-    }
-    // Build bucket groups with representative W×H (average) and color
-    const bucketGroups = Array.from(rootColorMap.entries()).map(([root, colorIdx]) => {
-      const cells = rootCellsMap.get(root) ?? [];
-      const avgW = cells.length > 0 ? (cells.reduce((s, c) => s + c.w, 0) / cells.length).toFixed(1) : "";
-      const avgH = cells.length > 0 ? (cells.reduce((s, c) => s + c.h, 0) / cells.length).toFixed(1) : "";
       return {
-        root,
-        color: CELL_TINTS[colorIdx],
+        root: `cluster_${idx}`,
+        color: tint,
         dotColor: CELL_DOT_COLORS[colorIdx],
         label: `${avgW} × ${avgH}`,
-        cells: cells.map((c) => ({ floor: c.floor, aptIndex: c.aptIndex })),
+        cells: cluster.map((c) => ({ floor: c.floor, aptIndex: c.aptIndex })),
       };
     });
+
     return { tintMap, bucketGroups };
-  }, [sizes, floors, apartmentsPerFloor, openingId]);
+  }, [sizes, floors, apartmentsPerFloor, groupOpeningIds, BUCKET_SIZE, toMM]);
 
   return (
     <div className="flex flex-col gap-2">
       <div className="flex items-center justify-between gap-2 flex-wrap">
-        {openingChips}
+        {groupChips}
         <div className="flex items-center gap-1">
           <Input
             type="number"
-            placeholder="W (cm)"
+            placeholder={`W (${unitLabel})`}
             value={bulkW}
             onChange={(e) => setBulkW(e.target.value)}
             className="w-20 h-7 text-xs"
@@ -2146,7 +2238,7 @@ function OpeningSizeGrid({
           <span className="text-xs text-muted-foreground">×</span>
           <Input
             type="number"
-            placeholder="H (cm)"
+            placeholder={`H (${unitLabel})`}
             value={bulkH}
             onChange={(e) => setBulkH(e.target.value)}
             className="w-20 h-7 text-xs"
@@ -2154,10 +2246,10 @@ function OpeningSizeGrid({
           <Select onValueChange={(v: string | null) => {
             if (!v) return;
             if (v === "all") {
-              if (bulkW && bulkH) onFillAll(openingId, bulkW, bulkH);
+              if (bulkW && bulkH) onFillAll(groupPieceTemplateId, bulkW, bulkH);
             } else {
               const group = bucketGroups.find((g) => g.root === v);
-              if (group && bulkW && bulkH) onFillBucket(openingId, bulkW, bulkH, group.cells);
+              if (group && bulkW && bulkH) onFillBucket(groupPieceTemplateId, bulkW, bulkH, group.cells);
             }
           }}>
             <SelectTrigger className="w-40 h-7 text-xs">
@@ -2178,7 +2270,7 @@ function OpeningSizeGrid({
           <Button
             variant="outline"
             className="h-7 text-xs"
-            onClick={() => onClearAll(openingId)}
+            onClick={() => onClearAll(groupPieceTemplateId)}
           >
             Clear
           </Button>
@@ -2189,10 +2281,10 @@ function OpeningSizeGrid({
         <Table>
           <TableHeader className="sticky top-0 z-10 bg-muted/50 backdrop-blur-sm">
             <TableRow className="border-b hover:bg-transparent">
-              <TableHead className="h-9 text-xs w-24 font-semibold">{openingLabel}</TableHead>
+              <TableHead className="h-9 text-xs w-24 font-semibold">{groupLabel}</TableHead>
               {Array.from({ length: apartmentsPerFloor }, (_, i) => (
                 <TableHead key={i} className="h-9 text-xs text-center font-semibold">
-                  Apartment {apartmentLabels[i] ?? String.fromCharCode(65 + i)}
+                  Apartment {i + 1}
                 </TableHead>
               ))}
             </TableRow>
@@ -2200,31 +2292,38 @@ function OpeningSizeGrid({
           <TableBody>
             {Array.from({ length: floors }, (_, f) => (
               <TableRow key={f} className="group">
-                <TableCell className="text-xs font-medium py-1.5 text-muted-foreground group-hover:text-foreground">Floor {f + 1}</TableCell>
+                <TableCell className="text-xs font-medium py-1.5 text-muted-foreground group-hover:text-foreground">Floor {floorLabels[f] ?? String.fromCharCode(65 + f)}</TableCell>
                 {Array.from({ length: apartmentsPerFloor }, (_, i) => {
-                  const hasOpening = cellHasOpening(f, i);
-                  const key = `${openingId}_${f}_${i}`;
-                  const cellSize = sizes[key] ?? { width: "", height: "" };
-                  const tint = cellTintMap[key];
+                  const openings = cellOpenings(f, i);
+                  const hasOpenings = openings.length > 0;
                   return (
-                    <TableCell key={i} className="py-3 px-4 text-center">
-                      {hasOpening ? (
-                        <div className="flex items-center justify-center gap-1">
-                          <Input
-                            type="number"
-                            placeholder="W (cm)"
-                            value={cellSize.width}
-                            onChange={(e) => onCellChange(openingId, f, i, "width", e.target.value)}
-                            className={`w-24 h-6 text-xs ${tint ? `ring-1 ${tint}` : ""}`}
-                          />
-                          <span className="text-xs text-muted-foreground">×</span>
-                          <Input
-                            type="number"
-                            placeholder="H (cm)"
-                            value={cellSize.height}
-                            onChange={(e) => onCellChange(openingId, f, i, "height", e.target.value)}
-                            className={`w-24 h-6 text-xs ${tint ? `ring-1 ${tint}` : ""}`}
-                          />
+                    <TableCell key={i} className="py-1.5 px-4 text-center">
+                      {hasOpenings ? (
+                        <div className="flex flex-col items-center gap-1">
+                          {openings.map((o) => {
+                            const key = `${o.id}_${f}_${i}`;
+                            const cellSize = sizes[key] ?? { width: "", height: "" };
+                            const tint = cellTintMap[key];
+                            return (
+                              <div key={o.id} className="flex items-center justify-center gap-1">
+                                <Input
+                                  type="number"
+                                  placeholder={`W (${unitLabel})`}
+                                  value={cellSize.width}
+                                  onChange={(e) => onCellChange(o.id, f, i, "width", e.target.value)}
+                                  className={`w-20 h-6 text-xs ${tint ? `ring-1 ${tint}` : ""}`}
+                                />
+                                <span className="text-xs text-muted-foreground">×</span>
+                                <Input
+                                  type="number"
+                                  placeholder={`H (${unitLabel})`}
+                                  value={cellSize.height}
+                                  onChange={(e) => onCellChange(o.id, f, i, "height", e.target.value)}
+                                  className={`w-20 h-6 text-xs ${tint ? `ring-1 ${tint}` : ""}`}
+                                />
+                              </div>
+                            );
+                          })}
                         </div>
                       ) : (
                         <span className="text-xs text-muted-foreground">—</span>
@@ -2237,10 +2336,19 @@ function OpeningSizeGrid({
           </TableBody>
         </Table>
       </div>
-      <p className="text-xs text-muted-foreground flex items-center gap-1.5">
+      <div className="flex items-center gap-2 text-xs text-muted-foreground">
         <HugeiconsIcon icon={InformationSquareIcon} size={14} />
-        Cells with similar W×H values (within 1.5cm) share the same ring color.
-      </p>
+        <span>Cells with similar W×H values (within</span>
+        <Input
+          type="number"
+          step="0.1"
+          min="0.1"
+          value={thresholdInput}
+          onChange={(e) => setThresholdInput(e.target.value)}
+          className="w-12 h-5 text-xs rounded-sm text-center"
+        />
+        <span>{unitLabel}) share the same ring color.</span>
+      </div>
     </div>
   );
 }
@@ -2260,22 +2368,24 @@ function PiecePools({
   hasPrev?: boolean;
   hasNext?: boolean;
 }) {
+  const { fromMM: convertFromMM, toMM: convertToMM, unitLabel, formatLength } = useSettings();
+  const profileTypeLabel = useProfileTypeLabel();
   const floors = building.floors;
   const apartmentsPerFloor = building.apartmentsPerFloor;
-  let apartmentLabels: string[] = [];
-  try { apartmentLabels = JSON.parse(building.apartmentLabels); } catch { apartmentLabels = []; }
+  let floorLabels: string[] = [];
+  try { floorLabels = JSON.parse(building.floorLabels); } catch { floorLabels = []; }
 
   // Build sizes map from existing sizes (read-only, no state needed)
   const sizes = useMemo(() => {
     const g: SizeGrid = {};
     for (const s of existingSizes) {
       g[`${s.apartmentTemplateOpeningId}_${s.floor}_${s.apartmentIndex}`] = {
-        width: String(s.width / 100),
-        height: String(s.height / 100),
+        width: String(convertFromMM(s.width)),
+        height: String(convertFromMM(s.height)),
       };
     }
     return g;
-  }, [existingSizes]);
+  }, [existingSizes, convertFromMM]);
 
   // Assignment map: floor_aptIndex → templateId
   const assignmentMap = useMemo(() => {
@@ -2295,102 +2405,176 @@ function PiecePools({
     return Array.from(ids);
   }, [existingAssignments]);
 
-  // Fetch openings for each used template
+  // Fetch openings for each used template (with piece template info)
   const templateQueries = useQueries({
     queries: usedTemplateIds.map((tplId) => ({
       queryKey: ["apartment-template", tplId],
-      queryFn: () => apiFetch<{ openings: { id: string; label: string }[] }>(`/api/apartment-templates/${tplId}`),
+      queryFn: () => apiFetch<{ openings: { id: string; label: string; pieceTemplateId: string; templateName: string }[] }>(`/api/apartment-templates/${tplId}`),
       enabled: !!tplId,
     })),
   });
 
   const templateOpeningsMap = useMemo(() => {
-    const m: Record<string, { id: string; label: string }[]> = {};
+    const m: Record<string, { id: string; label: string; pieceTemplateId: string; templateName: string }[]> = {};
     usedTemplateIds.forEach((tplId, i) => {
       const q = templateQueries[i];
       if (q?.data?.openings) {
-        m[tplId] = q.data.openings.map((o) => ({ id: o.id, label: o.label }));
+        m[tplId] = q.data.openings.map((o) => ({ id: o.id, label: o.label, pieceTemplateId: o.pieceTemplateId, templateName: o.templateName }));
       }
     });
     return m;
   }, [templateQueries, usedTemplateIds]);
 
-  // All unique openings across all used templates
-  const allOpenings = useMemo(() => {
-    const seen = new Set<string>();
-    const list: { id: string; label: string }[] = [];
-    for (const openings of Object.values(templateOpeningsMap)) {
+  // Group openings by pieceTemplateId
+  const allGroups = useMemo(() => {
+    const groupMap = new Map<string, { pieceTemplateId: string; pieceTemplateName: string; openings: { id: string; label: string }[] }>();
+    for (const [, openings] of Object.entries(templateOpeningsMap)) {
       for (const o of openings) {
-        if (!seen.has(o.id)) {
-          seen.add(o.id);
-          list.push(o);
+        if (!groupMap.has(o.pieceTemplateId)) {
+          groupMap.set(o.pieceTemplateId, { pieceTemplateId: o.pieceTemplateId, pieceTemplateName: o.templateName, openings: [] });
         }
+        groupMap.get(o.pieceTemplateId)!.openings.push({ id: o.id, label: o.label });
       }
     }
-    return list;
+    return Array.from(groupMap.values());
   }, [templateOpeningsMap]);
 
-  // For each opening, group cells by exact W×H and collect floor/apt assignments
-  const openingGroups = useMemo(() => {
-    return allOpenings.map((opening) => {
-      // Collect all cells for this opening that have sizes
-      const cells: { floor: number; aptIndex: number; w: number; h: number }[] = [];
+  // For each piece template group, collect all size groups across all openings
+  const groupSizeData = useMemo(() => {
+    return allGroups.map((group) => {
+      const openingIds = new Set(group.openings.map((o) => o.id));
+
+      // Collect all cells for this group
+      const cells: { floor: number; aptIndex: number; w: number; h: number; openingId: string }[] = [];
       for (let f = 0; f < floors; f++) {
         for (let i = 0; i < apartmentsPerFloor; i++) {
           const aptTplId = assignmentMap[`${f}_${i}`];
           if (!aptTplId) continue;
           const openings = templateOpeningsMap[aptTplId] ?? [];
-          if (!openings.some((o) => o.id === opening.id)) continue;
-          const key = `${opening.id}_${f}_${i}`;
-          const cell = sizes[key];
-          if (!cell || !cell.width || !cell.height) continue;
-          const w = parseFloat(cell.width);
-          const h = parseFloat(cell.height);
-          if (isNaN(w) || isNaN(h)) continue;
-          cells.push({ floor: f, aptIndex: i, w, h });
+          for (const o of openings) {
+            if (!openingIds.has(o.id)) continue;
+            const key = `${o.id}_${f}_${i}`;
+            const cell = sizes[key];
+            if (!cell || !cell.width || !cell.height) continue;
+            const w = parseFloat(cell.width);
+            const h = parseFloat(cell.height);
+            if (isNaN(w) || isNaN(h)) continue;
+            cells.push({ floor: f, aptIndex: i, w, h, openingId: o.id });
+          }
         }
       }
 
-      // Group cells by exact W×H
-      const sizeKeyMap = new Map<string, { floor: number; aptIndex: number; w: number; h: number }[]>();
+      // Group cells by exact W×H (across all openings in this piece template)
+      const sizeKeyMap = new Map<string, { w: number; h: number; locations: Map<string, number>; count: number }>();
       for (const cell of cells) {
         const sizeKey = `${cell.w}_${cell.h}`;
-        if (!sizeKeyMap.has(sizeKey)) sizeKeyMap.set(sizeKey, []);
-        sizeKeyMap.get(sizeKey)!.push(cell);
+        if (!sizeKeyMap.has(sizeKey)) {
+          sizeKeyMap.set(sizeKey, { w: cell.w, h: cell.h, locations: new Map(), count: 0 });
+        }
+        const entry = sizeKeyMap.get(sizeKey)!;
+        const loc = `${floorLabels[cell.floor] ?? String.fromCharCode(65 + cell.floor)}${cell.aptIndex + 1}`;
+        entry.locations.set(loc, (entry.locations.get(loc) ?? 0) + 1);
+        entry.count++;
       }
 
-      const sizeGroups = Array.from(sizeKeyMap.entries()).map(([sizeKey, groupCells]) => ({
-        root: sizeKey,
-        avgW: String(groupCells[0].w),
-        avgH: String(groupCells[0].h),
-        locations: groupCells.map((c) =>
-          `${apartmentLabels[c.aptIndex] ?? String.fromCharCode(65 + c.aptIndex)}${c.floor + 1}`
+      const sizeGroups = Array.from(sizeKeyMap.values()).map((g) => ({
+        avgW: String(g.w),
+        avgH: String(g.h),
+        locations: Array.from(g.locations.entries()).map(([loc, n]) =>
+          n > 1 ? `${loc}×${n}` : loc
         ),
-        count: groupCells.length,
+        count: g.count,
       }));
 
-      return { opening, sizeGroups };
+      return { group, sizeGroups };
     });
-  }, [allOpenings, sizes, floors, apartmentsPerFloor, assignmentMap, templateOpeningsMap, apartmentLabels]);
+  }, [allGroups, sizes, floors, apartmentsPerFloor, assignmentMap, templateOpeningsMap, floorLabels]);
 
-  const [activeOpeningId, setActiveOpeningId] = useState<string | null>(null);
+  const [activeGroupId, setActiveGroupId] = useState<string | null>(null);
 
-  // Auto-select first opening
+  // Auto-select first group
   useEffect(() => {
-    if (!activeOpeningId && allOpenings.length > 0) {
-      setActiveOpeningId(allOpenings[0].id);
+    if (!activeGroupId && allGroups.length > 0) {
+      setActiveGroupId(allGroups[0].pieceTemplateId);
     }
-  }, [allOpenings, activeOpeningId]);
+  }, [allGroups, activeGroupId]);
 
-  const activeGroup = openingGroups.find((g) => g.opening.id === activeOpeningId);
+  const activeData = groupSizeData.find((d) => d.group.pieceTemplateId === activeGroupId);
+
+  // Fetch the piece template detail (pieces + variables) for the active group
+  const { data: templateDetail } = useTemplate(activeGroupId);
+  const { data: profileSystemsList } = useProfileSystems();
+
+  // Resolve profile system constants for the active template
+  const systemConstants = useMemo((): SystemConstant[] => {
+    if (!templateDetail?.profileSystemId || !profileSystemsList) return [];
+    const sys = profileSystemsList.find((s) => s.id === templateDetail.profileSystemId);
+    if (!sys?.constants) return [];
+    try {
+      return JSON.parse(sys.constants) as SystemConstant[];
+    } catch {
+      return [];
+    }
+  }, [templateDetail?.profileSystemId, profileSystemsList]);
+
+  // Evaluate piece formulas for each size group
+  const piecesBySize = useMemo(() => {
+    if (!templateDetail?.pieces || !activeData) return null;
+    const variables: TemplateVariable[] = [
+      ...systemConstants.map((c) => ({ name: c.name, defaultValue: c.defaultValue })),
+      ...(templateDetail.variables ?? []).map((v) => ({
+        name: v.name,
+        defaultValue: v.defaultValue,
+      })),
+    ];
+
+    return activeData.sizeGroups.map((sg) => {
+      const wMm = convertToMM(parseFloat(sg.avgW));
+      const hMm = convertToMM(parseFloat(sg.avgH));
+      const result = generatePieces(
+        templateDetail.pieces.map((p) => ({
+          id: p.id,
+          label: p.label,
+          profileType: p.profileType,
+          lengthFormula: p.lengthFormula,
+          quantity: p.quantity,
+        })),
+        variables,
+        wMm,
+        hMm,
+      );
+      return { pieces: result.pieces, errors: result.errors };
+    });
+  }, [templateDetail, activeData, convertToMM, systemConstants]);
+
+  // Group pieces by profileType for grouped column headers
+  const pieceGroups = useMemo(() => {
+    const pieces = piecesBySize?.[0]?.pieces;
+    if (!pieces) return [];
+    const groups: { profileType: string; label: string; count: number; indices: number[] }[] = [];
+    const seen = new Map<string, number>();
+    for (let i = 0; i < pieces.length; i++) {
+      const pt = pieces[i].profileType;
+      if (seen.has(pt)) {
+        const gi = seen.get(pt)!;
+        groups[gi].count++;
+        groups[gi].indices.push(i);
+      } else {
+        seen.set(pt, groups.length);
+        groups.push({ profileType: pt, label: profileTypeLabel(pt), count: 1, indices: [i] });
+      }
+    }
+    return groups;
+  }, [piecesBySize, profileTypeLabel]);
 
   const isLoading = templateQueries.some((q) => q.isLoading);
+  const isLoadingTemplate = !!activeGroupId && !templateDetail;
 
-  if (isLoading) {
-    return <div className="text-center text-sm text-muted-foreground py-8">Loading openings...</div>;
+  if (isLoading || isLoadingTemplate) {
+    return <LoadingState label="Loading openings..." />;
   }
 
-  if (allOpenings.length === 0) {
+  if (allGroups.length === 0) {
     return (
       <div className="text-center text-sm text-muted-foreground py-8">
         No openings found. Make sure floor assignments are set.
@@ -2417,65 +2601,104 @@ function PiecePools({
 
       <div className="flex items-center justify-between">
         <div className="inline-flex items-center gap-0.5 rounded-md bg-muted p-0.5">
-          {allOpenings.map((o) => (
+          {allGroups.map((g) => (
             <button
-              key={o.id}
+              key={g.pieceTemplateId}
               type="button"
               className={`px-3 py-1 text-xs font-medium rounded-md transition-all ${
-                activeOpeningId === o.id
+                activeGroupId === g.pieceTemplateId
                   ? "bg-background text-foreground shadow-sm"
                   : "text-muted-foreground hover:text-foreground"
               }`}
-              onClick={() => setActiveOpeningId(o.id)}
+              onClick={() => setActiveGroupId(g.pieceTemplateId)}
             >
-              {o.label}
+              {g.pieceTemplateName}
             </button>
           ))}
         </div>
-        {activeGroup && (
-          <Badge variant="secondary" className="text-[10px]">{activeGroup.sizeGroups.length} sizes</Badge>
+        {activeData && (
+          <Badge variant="secondary" className="text-[10px]">{activeData.sizeGroups.length} sizes</Badge>
         )}
       </div>
 
-      {activeGroup && (
+      {activeData && (
         <div className="flex flex-col gap-2">
-          {activeGroup.sizeGroups.length === 0 ? (
+          {activeData.sizeGroups.length === 0 ? (
             <p className="text-xs text-muted-foreground">No sizes entered yet.</p>
           ) : (
             <div className="overflow-x-auto">
               <Table>
                 <TableHeader className="sticky top-0 z-10 bg-muted/50 backdrop-blur-sm">
                   <TableRow className="border-b hover:bg-transparent">
-                    <TableHead className="h-9 text-xs w-24 font-semibold">{activeGroup.opening.label}</TableHead>
-                    <TableHead className="h-9 text-xs text-center font-semibold">Qty</TableHead>
-                    <TableHead className="h-9 text-xs text-start font-semibold">Locations</TableHead>
-                    <TableHead className="h-9 text-xs text-center font-semibold">Width (cm)</TableHead>
-                    <TableHead className="h-9 text-xs text-center font-semibold">Height (cm)</TableHead>
+                    <TableHead rowSpan={2} className="h-9 text-xs w-24 font-semibold align-middle">{activeData.group.pieceTemplateName}</TableHead>
+                    <TableHead rowSpan={2} className="h-9 text-xs text-center font-semibold align-middle">Qty</TableHead>
+                    <TableHead rowSpan={2} className="h-9 text-xs text-center font-semibold align-middle">Locations</TableHead>
+                    <TableHead rowSpan={2} className="h-9 text-xs text-center font-semibold align-middle">Width ({unitLabel})</TableHead>
+                    <TableHead rowSpan={2} className="h-9 text-xs text-center font-semibold align-middle">Height ({unitLabel})</TableHead>
+                    {pieceGroups.map((g) => (
+                      <TableHead key={g.profileType} colSpan={g.count} className="h-6 text-xs text-center font-semibold border-l border-border/40">
+                        {g.label}
+                      </TableHead>
+                    ))}
+                  </TableRow>
+                  <TableRow className="border-b hover:bg-transparent">
+                    {piecesBySize && piecesBySize[0]?.pieces.map((p, i) => (
+                      <TableHead key={i} className="h-6 text-[10px] text-center font-normal whitespace-nowrap border-l border-border/20">
+                        {p.label}
+                        <span className="text-muted-foreground ml-1">×{p.quantity}</span>
+                      </TableHead>
+                    ))}
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {activeGroup.sizeGroups.map((group, idx) => (
-                    <TableRow key={group.root} className="group">
-                      <TableCell className="text-xs font-medium py-1.5 text-muted-foreground group-hover:text-foreground">
-                        Size {idx + 1}
-                      </TableCell>
-                      <TableCell className="py-3 px-4 text-center">
-                        <span className="text-xs">{group.count}</span>
-                      </TableCell>
-                      <TableCell className="py-3 px-4">
-                        <div className="grid grid-cols-3 gap-0.5 w-fit">
-                          {group.locations.map((loc, i) => (
-                            <span key={i} className="text-[10 px] text-muted-foreground text-center leading-tight py-0.5 px-1 rounded border border-border/60 w-12">{loc}</span>
-                          ))}
-                        </div>
-                      </TableCell>
-                      <TableCell className="py-3 px-4 text-center">
-                        <span className="text-xs font-mono">{group.avgW}</span>
-                      </TableCell>
-                      <TableCell className="py-3 px-4 text-center">
-                        <span className="text-xs font-mono">{group.avgH}</span>
-                      </TableCell>
-                    </TableRow>
+                  {activeData.sizeGroups.map((group, idx) => (
+                    <Fragment key={idx}>
+                      <TableRow className="group">
+                        <TableCell className="text-xs font-medium py-1.5 text-muted-foreground group-hover:text-foreground">
+                          Size {idx + 1}
+                        </TableCell>
+                        <TableCell className="py-3 px-4 text-center">
+                          <span className="text-xs">{group.count}</span>
+                        </TableCell>
+                        <TableCell className="py-3 px-4 text-center">
+                          <div className="grid grid-cols-3 gap-0.5 w-fit mx-auto">
+                            {group.locations.map((loc, i) => {
+                              const m = loc.match(/^(.+)×(\d+)$/);
+                              return (
+                                <span key={i} className="text-xs text-muted-foreground text-center leading-tight py-0.5 px-0.5 rounded border border-border/60 w-12">
+                                  {m ? <>{m[1]}<span className="text-[10px]"> ×{m[2]}</span></> : loc}
+                                </span>
+                              );
+                            })}
+                          </div>
+                        </TableCell>
+                        <TableCell className="py-3 px-4 text-center">
+                          <span className="text-xs font-mono">{group.avgW}</span>
+                        </TableCell>
+                        <TableCell className="py-3 px-4 text-center">
+                          <span className="text-xs font-mono">{group.avgH}</span>
+                        </TableCell>
+                        {piecesBySize?.[idx]?.pieces.map((p, i) => (
+                          <TableCell key={i} className="py-3 px-4 text-center">
+                            <span className="text-xs font-mono">{formatLength(p.length, false)}</span>
+                          </TableCell>
+                        ))}
+                      </TableRow>
+                      <TableRow key={`sub-${idx}`} className="border-b bg-muted/30">
+                        <TableCell colSpan={3} className="py-1 px-4" />
+                        <TableCell className="py-1 px-4 text-[12px] text-muted-foreground text-center">
+                          —
+                        </TableCell>
+                        <TableCell className="py-1 px-4 text-[12px] text-muted-foreground text-center">
+                          —
+                        </TableCell>
+                        {piecesBySize?.[idx]?.pieces.map((p, i) => (
+                          <TableCell key={i} className="py-1 px-4 text-center">
+                            <span className="text-[12px] font-mono text-muted-foreground">{group.count * p.quantity}</span>
+                          </TableCell>
+                        ))}
+                      </TableRow>
+                    </Fragment>
                   ))}
                 </TableBody>
               </Table>

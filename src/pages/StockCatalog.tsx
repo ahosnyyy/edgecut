@@ -6,6 +6,7 @@ import {
   useDeleteStockCatalogEntry,
   type StockCatalogEntry,
 } from "../hooks/useProjects";
+import { useProfileTypes } from "../hooks/useProfileTypes";
 import { Button } from "../components/ui/button";
 import { Card, CardAction, CardDescription, CardFooter, CardHeader, CardTitle } from "../components/ui/card";
 import { Input } from "../components/ui/input";
@@ -21,6 +22,9 @@ import {
   DialogFooter,
 } from "../components/ui/dialog";
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "../components/ui/empty";
+import { LoadingState, CardSkeletonGrid } from "../components/ui/loading-states";
+import { Spinner } from "../components/ui/spinner";
+import { SaveButton, DeleteGuardDialog } from "../components/ui/action-buttons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import {
   Add01Icon,
@@ -30,22 +34,19 @@ import {
   PackageIcon,
   Search01Icon,
   FilterIcon,
+  SaveIcon,
 } from "@hugeicons/core-free-icons";
+import { useSettings } from "../hooks/useSettings";
 
-const PROFILE_TYPE_LABELS: Record<string, string> = {
-  frame: "Frame",
-  sash: "Sash",
-  mullion: "Mullion",
-  bead: "Bead",
-  custom: "Custom",
-};
-
-function profileTypeLabel(id: string): string {
-  return PROFILE_TYPE_LABELS[id] ?? id.charAt(0).toUpperCase() + id.slice(1);
+function useProfileTypeLabel() {
+  const { data: profileTypes } = useProfileTypes();
+  return (key: string) => profileTypes?.find((pt) => pt.key === key)?.label ?? key.charAt(0).toUpperCase() + key.slice(1);
 }
 
 export default function StockCatalog() {
+  const profileTypeLabel = useProfileTypeLabel();
   const { data: entries, isLoading } = useStockCatalog();
+  const { formatLength } = useSettings();
   const addMutation = useAddStockCatalogEntry();
   const updateMutation = useUpdateStockCatalogEntry();
   const deleteMutation = useDeleteStockCatalogEntry();
@@ -123,9 +124,7 @@ export default function StockCatalog() {
       <ScrollArea className="flex-1">
         <div className="p-4">
           {isLoading ? (
-            <div className="text-center text-sm text-muted-foreground py-8">
-              Loading stock catalog...
-            </div>
+            <LoadingState label="Loading stock catalog..." />
           ) : filtered.length === 0 ? (
             search.trim() || filterSystem !== "all" ? (
               <Empty>
@@ -194,14 +193,23 @@ export default function StockCatalog() {
                         >
                           <HugeiconsIcon icon={PencilEdit01Icon} size={13} />
                         </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="h-6 w-6 p-0 text-muted-foreground hover:text-destructive opacity-0 group-hover:opacity-100"
-                          onClick={() => handleDelete(entry.id)}
-                        >
-                          <HugeiconsIcon icon={Delete02Icon} size={13} />
-                        </Button>
+                        <DeleteGuardDialog
+                          trigger={
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-6 w-6 p-0 text-muted-foreground hover:text-destructive opacity-0 group-hover:opacity-100"
+                            >
+                              <HugeiconsIcon icon={Delete02Icon} size={13} />
+                            </Button>
+                          }
+                          usageCheckUrl={`/api/stock-catalog/${entry.id}/usage`}
+                          title="Delete this catalog entry?"
+                          description="This will permanently remove the stock catalog entry. Projects using this entry will keep their existing stock."
+                          entityName={`${entry.profileSystem} ${entry.profileType} ${entry.color}`}
+                          onConfirm={() => handleDelete(entry.id)}
+                          isPending={deleteMutation.isPending}
+                        />
                       </div>
                     </CardAction>
                     <CardTitle className="text-sm truncate">
@@ -219,7 +227,7 @@ export default function StockCatalog() {
                       >
                         {entry.profileSystem}
                       </Badge>
-                      <span className="truncate"> · {profileTypeLabel(entry.profileType)} · {(entry.length / 100).toFixed(0)} cm</span>
+                      <span className="truncate"> · {profileTypeLabel(entry.profileType)} · {formatLength(entry.length)}</span>
                     </CardDescription>
                   </CardHeader>
                   <CardFooter className="bg-muted/50 py-2.5">
@@ -308,15 +316,16 @@ export default function StockCatalog() {
             setShowCreate(false);
             setEditing(null);
           }}
-          onSave={(data) => {
+          onSave={async (data) => {
             if (editing) {
-              updateMutation.mutate({ id: editing.id, data });
+              await updateMutation.mutateAsync({ id: editing.id, data });
             } else {
-              addMutation.mutate(data);
+              await addMutation.mutateAsync(data);
             }
             setShowCreate(false);
             setEditing(null);
           }}
+          isSaving={updateMutation.isPending || addMutation.isPending}
         />
       )}
     </div>
@@ -327,15 +336,20 @@ function StockCatalogDialog({
   entry,
   onClose,
   onSave,
+  isSaving,
 }: {
   entry: StockCatalogEntry | null;
   onClose: () => void;
   onSave: (data: Omit<StockCatalogEntry, "id" | "reservedQty" | "usedQty">) => void;
+  isSaving: boolean;
 }) {
+  const { fromMM: convertFromMM, toMM: convertToMM, unitLabel } = useSettings();
+  const { data: profileTypes } = useProfileTypes();
+  const profileTypeLabel = useProfileTypeLabel();
   const [profileSystem, setProfileSystem] = useState<"manazil" | "premier">(entry?.profileSystem ?? "manazil");
   const [profileType, setProfileType] = useState(entry?.profileType ?? "");
   const [label, setLabel] = useState(entry?.label ?? "");
-  const [length, setLength] = useState(entry?.length ? entry.length / 100 : 60);
+  const [length, setLength] = useState(entry?.length ? convertFromMM(entry.length) : 60);
   const [quantity, setQuantity] = useState(entry?.quantity ?? -1);
 
   const handleSave = () => {
@@ -343,7 +357,7 @@ function StockCatalogDialog({
       profileSystem,
       profileType: profileType || "frame",
       color: "#000000",
-      length: length * 100,
+      length: convertToMM(length),
       quantity,
       label: label.trim() || null,
     });
@@ -383,11 +397,9 @@ function StockCatalogDialog({
                   </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="frame">Frame</SelectItem>
-                  <SelectItem value="sash">Sash</SelectItem>
-                  <SelectItem value="mullion">Mullion</SelectItem>
-                  <SelectItem value="bead">Bead</SelectItem>
-                  <SelectItem value="custom">Custom</SelectItem>
+                  {(profileTypes ?? []).map((pt) => (
+                    <SelectItem key={pt.key} value={pt.key}>{pt.label}</SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>
@@ -403,7 +415,7 @@ function StockCatalogDialog({
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div className="flex flex-col gap-1.5">
-              <Label htmlFor="sd-length">Length (cm)</Label>
+              <Label htmlFor="sd-length">Length ({unitLabel})</Label>
               <Input
                 id="sd-length"
                 type="number"
@@ -433,10 +445,13 @@ function StockCatalogDialog({
           </div>
         </div>
         <DialogFooter>
-          <Button variant="ghost" onClick={onClose}>Cancel</Button>
-          <Button onClick={handleSave} disabled={!label.trim()}>
-            {entry ? "Save Changes" : "Create"}
-          </Button>
+          <SaveButton
+            onClick={handleSave}
+            isPending={isSaving}
+            isCreate={!entry}
+            disabled={!label.trim()}
+            onCancel={onClose}
+          />
         </DialogFooter>
       </DialogContent>
     </Dialog>

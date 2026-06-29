@@ -132,7 +132,30 @@ const builtinTemplates: TemplateSeed[] = [
 ];
 
 async function seed() {
-  console.log("Seeding built-in templates...");
+  console.log("Seeding profile types...");
+
+  const defaultProfileTypes = [
+    { key: "frame", label: "Frame", isReserved: true },
+    { key: "sash", label: "Sash", isReserved: true },
+    { key: "mullion", label: "Mullion", isReserved: true },
+    { key: "bead", label: "Bead", isReserved: true },
+    { key: "custom", label: "Custom", isReserved: true },
+  ];
+
+  for (let i = 0; i < defaultProfileTypes.length; i++) {
+    const pt = defaultProfileTypes[i];
+    await db.insert(schema.profileTypes).values({
+      id: generateId(),
+      key: pt.key,
+      label: pt.label,
+      sortOrder: i,
+      isReserved: pt.isReserved,
+      createdAt: now,
+    });
+    console.log(`  ✓ ${pt.label} (${pt.key})`);
+  }
+
+  console.log("\nSeeding built-in templates...");
 
   for (const tpl of builtinTemplates) {
     const templateId = generateId();

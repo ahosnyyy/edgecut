@@ -25,6 +25,8 @@ import {
 import { Add01Icon, AddSquareIcon, FolderOffIcon, Search01Icon, FilterIcon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "../components/ui/empty";
+import { CardSkeletonGrid, LoadingState } from "../components/ui/loading-states";
+import { SaveButton } from "../components/ui/action-buttons";
 
 export default function ProjectsList() {
   const { data: projects, isLoading } = useProjects();
@@ -114,9 +116,7 @@ export default function ProjectsList() {
       <ScrollArea className="flex-1">
         <div className="p-4">
           {isLoading ? (
-            <div className="text-center text-sm text-muted-foreground py-8">
-              Loading projects...
-            </div>
+            <LoadingState label="Loading projects..." />
           ) : filtered.length === 0 ? (
             (search.trim() || filterStatus !== "all") ? (
               <Empty>
@@ -229,10 +229,13 @@ export default function ProjectsList() {
             <p className="text-xs text-muted-foreground">A default building will be created automatically. You can add more buildings later.</p>
           </div>
           <DialogFooter>
-            <Button variant="ghost" onClick={() => setShowCreate(false)}>Cancel</Button>
-            <Button onClick={handleCreate} disabled={createMutation.isPending || !name.trim()}>
-              {createMutation.isPending ? "Creating..." : "Create"}
-            </Button>
+            <SaveButton
+              onClick={handleCreate}
+              isPending={createMutation.isPending}
+              isCreate
+              disabled={!name.trim()}
+              onCancel={() => setShowCreate(false)}
+            />
           </DialogFooter>
         </DialogContent>
       </Dialog>

@@ -7,6 +7,7 @@ import { apartmentTemplateRoutes } from "./routes/apartmentTemplates.js";
 import { projectRoutes } from "./routes/projects.js";
 import { stockCatalogRoutes } from "./routes/stockCatalog.js";
 import { profileSystemRoutes } from "./routes/profileSystems.js";
+import { profileTypeRoutes } from "./routes/profileTypes.js";
 import { dashboardRoutes } from "./routes/dashboard.js";
 import { apiAuthMiddleware } from "./middleware/auth.js";
 
@@ -42,6 +43,7 @@ protectedApi.route("/apartment-templates", apartmentTemplateRoutes);
 protectedApi.route("/projects", projectRoutes);
 protectedApi.route("/stock-catalog", stockCatalogRoutes);
 protectedApi.route("/profile-systems", profileSystemRoutes);
+protectedApi.route("/profile-types", profileTypeRoutes);
 protectedApi.route("/dashboard", dashboardRoutes);
 
 app.route("/api", protectedApi);

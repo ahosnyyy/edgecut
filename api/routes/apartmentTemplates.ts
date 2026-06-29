@@ -6,6 +6,9 @@ import {
   apartmentTemplateOpenings,
   templates,
   profileSystems,
+  projectFloorAssignments,
+  projects,
+  buildings,
 } from "../db/schema.js";
 import type { Env } from "../index.js";
 
@@ -161,6 +164,42 @@ apartmentTemplateRoutes.put("/:id", async (c) => {
   }
 
   return c.json({ id, updated: true });
+});
+
+// ─── GET /api/apartment-templates/:id/usage — Check references before delete ──
+
+apartmentTemplateRoutes.get("/:id/usage", async (c) => {
+  const db = getDb(c.env);
+  const id = c.req.param("id");
+
+  const assignments = await db
+    .select({
+      projectId: projectFloorAssignments.projectId,
+      buildingId: projectFloorAssignments.buildingId,
+      projectName: projects.name,
+      buildingName: buildings.name,
+    })
+    .from(projectFloorAssignments)
+    .innerJoin(projects, eq(projectFloorAssignments.projectId, projects.id))
+    .innerJoin(buildings, eq(projectFloorAssignments.buildingId, buildings.id))
+    .where(eq(projectFloorAssignments.apartmentTemplateId, id));
+
+  const uniqueProjects = new Map<string, { name: string; buildings: Set<string> }>();
+  for (const a of assignments) {
+    if (!uniqueProjects.has(a.projectId)) {
+      uniqueProjects.set(a.projectId, { name: a.projectName, buildings: new Set() });
+    }
+    uniqueProjects.get(a.projectId)!.buildings.add(a.buildingName);
+  }
+
+  const references = Array.from(uniqueProjects.entries()).map(([pid, info]) => ({
+    type: "project" as const,
+    id: pid,
+    name: info.name,
+    detail: `${info.buildings.size} building(s): ${Array.from(info.buildings).join(", ")}`,
+  }));
+
+  return c.json({ canDelete: references.length === 0, references });
 });
 
 // ─── DELETE /api/apartment-templates/:id — Delete ─────────────────────────────

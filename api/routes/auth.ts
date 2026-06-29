@@ -5,6 +5,7 @@ import { eq } from "drizzle-orm";
 import { getDb } from "../db/client.js";
 import { users } from "../db/schema.js";
 import type { Env } from "../index.js";
+import { apiAuthMiddleware } from "../middleware/auth.js";
 
 const JWT_EXPIRY = "7d";
 const JWT_SECRET = (env: Env) => new TextEncoder().encode(env.JWT_SECRET);
@@ -103,4 +104,23 @@ authRoutes.post("/login", async (c) => {
     token,
     user: { id: user.id, email: user.email, name: user.name },
   });
+});
+
+// ─── GET /api/me — Validate token and return fresh user data ────────────────
+
+authRoutes.get("/me", apiAuthMiddleware, async (c) => {
+  const userId = c.get("userId");
+  const db = getDb(c.env);
+
+  const found = await db
+    .select({ id: users.id, email: users.email, name: users.name })
+    .from(users)
+    .where(eq(users.id, userId))
+    .limit(1);
+
+  if (found.length === 0) {
+    return c.json({ error: "User not found" }, 401);
+  }
+
+  return c.json({ user: found[0] });
 });

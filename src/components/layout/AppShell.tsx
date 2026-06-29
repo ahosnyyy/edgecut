@@ -36,7 +36,7 @@ function AppBreadcrumbs() {
 
   const projectId = segments[0] === "projects" && segments[1] ? segments[1] : null;
   const buildingId = segments[0] === "projects" && segments[2] === "buildings" && segments[3] ? segments[3] : null;
-  const { data: project } = useProject(projectId);
+  const { data: project, isLoading: projectLoading } = useProject(projectId);
 
   if (segments.length === 0) return null;
 
@@ -54,15 +54,19 @@ function AppBreadcrumbs() {
     } else if (projectId && i === 1) {
       if (project?.name) {
         crumbs.push({ label: project.name, path: currentPath });
+      } else if (projectLoading) {
+        crumbs.push({ label: "…", path: currentPath });
       } else {
         crumbs.push({ label: seg.length > 8 ? `${seg.slice(0, 8)}…` : seg, path: currentPath });
       }
     } else if (buildingId && i === 3) {
       const building = project?.buildings?.find((b) => b.id === buildingId);
-      crumbs.push({ label: building?.name ?? "Building", path: currentPath });
+      crumbs.push({ label: building?.name ?? (projectLoading ? "…" : "Building"), path: currentPath });
     } else if (i === segments.length - 1 && crumbs.length > 0) {
       if (projectId && project?.name) {
         crumbs.push({ label: project.name, path: currentPath });
+      } else if (projectId && projectLoading) {
+        crumbs.push({ label: "…", path: currentPath });
       } else {
         crumbs.push({
           label: seg.length > 8 ? `${seg.slice(0, 8)}…` : seg,

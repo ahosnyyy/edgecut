@@ -2,6 +2,7 @@ import { createBrowserRouter, RouterProvider, Navigate, Outlet } from "react-rou
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { AppProvider } from "./context/AppProvider";
 import { AuthProvider } from "./auth/useAuth";
+import { SettingsProvider } from "./hooks/useSettings";
 import ProtectedRoute from "./auth/ProtectedRoute";
 import AppShell from "./components/layout/AppShell";
 import Login from "./pages/Login";
@@ -10,7 +11,6 @@ import QuickOptimize from "./pages/QuickOptimize";
 import ProjectsList from "./pages/ProjectsList";
 import ProjectBuilder from "./pages/ProjectBuilder";
 import BuildingDetailPage from "./pages/BuildingDetailPage";
-import TemplateManager from "./pages/TemplateManager";
 import ApartmentTemplateManager from "./pages/ApartmentTemplateManager";
 import Settings from "./pages/Settings";
 import StockCatalog from "./pages/StockCatalog";
@@ -45,7 +45,6 @@ const router = createBrowserRouter([
       { path: "/projects/:id", element: <ProjectBuilder /> },
       { path: "/projects/:id/buildings/:buildingId", element: <BuildingDetailPage /> },
       { path: "/apartment-templates", element: <ApartmentTemplateManager /> },
-      { path: "/piece-templates", element: <TemplateManager /> },
       { path: "/settings", element: <Settings /> },
       { path: "/stock-catalog", element: <StockCatalog /> },
       { path: "/profile-systems", element: <ProfileSystemManager /> },
@@ -65,9 +64,11 @@ export default function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
-        <AppProvider>
-          <RouterProvider router={router} />
-        </AppProvider>
+        <SettingsProvider>
+          <AppProvider>
+            <RouterProvider router={router} />
+          </AppProvider>
+        </SettingsProvider>
       </AuthProvider>
     </QueryClientProvider>
   );

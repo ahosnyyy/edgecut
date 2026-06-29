@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import {
   useApartmentTemplates,
   useApartmentTemplate,
@@ -41,6 +41,8 @@ import {
   AlertDialogTitle,
 } from "../components/ui/alert-dialog";
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "../components/ui/empty";
+import { LoadingState, CardSkeletonGrid, DialogLoadingState } from "../components/ui/loading-states";
+import { SaveButton, DeleteGuardDialog } from "../components/ui/action-buttons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import {
   Add01Icon,
@@ -88,7 +90,7 @@ export default function ApartmentTemplateManager() {
   const { data: profileSystemsList } = useProfileSystems();
   const [editingId, setEditingId] = useState<string | null>(null);
   const [isCreating, setIsCreating] = useState(false);
-  const [deleteId, setDeleteId] = useState<string | null>(null);
+  const deleteMutation = useDeleteApartmentTemplate();
   const [search, setSearch] = useState("");
   const [filterOpenings, setFilterOpenings] = useState<string>("all");
 
@@ -192,9 +194,7 @@ export default function ApartmentTemplateManager() {
       <ScrollArea className="flex-1">
         <div className="p-4">
           {isLoading ? (
-            <div className="text-center text-sm text-muted-foreground py-8">
-              Loading apartment types...
-            </div>
+            <LoadingState label="Loading apartment types..." />
           ) : filtered.length === 0 ? (
             search.trim() || filterOpenings !== "all" ? (
               <Empty>
@@ -264,14 +264,27 @@ export default function ApartmentTemplateManager() {
                         >
                           <HugeiconsIcon icon={PencilEdit01Icon} size={13} />
                         </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="h-6 w-6 p-0 text-muted-foreground hover:text-destructive opacity-0 group-hover:opacity-100"
-                          onClick={(e) => { e.stopPropagation(); setDeleteId(tpl.id); }}
-                        >
-                          <HugeiconsIcon icon={Delete02Icon} size={13} />
-                        </Button>
+                        <span onClick={(e) => e.stopPropagation()}>
+                        <DeleteGuardDialog
+                          trigger={
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-6 w-6 p-0 text-muted-foreground hover:text-destructive opacity-0 group-hover:opacity-100"
+                            >
+                              <HugeiconsIcon icon={Delete02Icon} size={13} />
+                            </Button>
+                          }
+                          usageCheckUrl={`/api/apartment-templates/${tpl.id}/usage`}
+                          title="Delete this apartment template?"
+                          description="This will permanently remove the apartment template and all its opening definitions."
+                          entityName={tpl.name}
+                          onConfirm={async () => {
+                            await deleteMutation.mutateAsync(tpl.id);
+                          }}
+                          isPending={deleteMutation.isPending}
+                        />
+                        </span>
                       </div>
                     </CardAction>
                     <CardTitle className="text-sm truncate flex items-center gap-1.5">
@@ -306,51 +319,7 @@ export default function ApartmentTemplateManager() {
         />
       )}
 
-      <AlertDialog
-        open={!!deleteId}
-        onOpenChange={(open) => !open && setDeleteId(null)}
-      >
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Delete apartment type?</AlertDialogTitle>
-            <AlertDialogDescription>
-              This will remove the apartment type and all its opening definitions.
-              Projects using this type will lose their assignments.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <DeleteAptAction deleteId={deleteId} onDone={() => setDeleteId(null)} />
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
     </div>
-  );
-}
-
-function DeleteAptAction({
-  deleteId,
-  onDone,
-}: {
-  deleteId: string | null;
-  onDone: () => void;
-}) {
-  const deleteMutation = useDeleteApartmentTemplate();
-  return (
-    <AlertDialogAction
-      className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-      onClick={async () => {
-        if (!deleteId) return;
-        try {
-          await deleteMutation.mutateAsync(deleteId);
-          onDone();
-        } catch {
-          // handled by mutation
-        }
-      }}
-    >
-      Delete
-    </AlertDialogAction>
   );
 }
 
@@ -376,6 +345,12 @@ function ApartmentTemplateEditor({
     if (detail) return templateFromDetail(detail);
     return emptyApartmentTemplate();
   });
+
+  useEffect(() => {
+    if (detail) {
+      setForm(templateFromDetail(detail));
+    }
+  }, [detail]);
   const [saveError, setSaveError] = useState<string | null>(null);
 
   const isLoadingDetail = !!templateId && !detail;
@@ -440,9 +415,7 @@ function ApartmentTemplateEditor({
     return (
       <Dialog open={true} onOpenChange={onClose}>
         <DialogContent className="sm:max-w-xl">
-          <div className="py-8 text-center text-sm text-muted-foreground">
-            Loading apartment type...
-          </div>
+          <DialogLoadingState label="Loading apartment type..." />
         </DialogContent>
       </Dialog>
     );
@@ -566,15 +539,12 @@ function ApartmentTemplateEditor({
         </div>
 
         <DialogFooter className="gap-2 shrink-0">
-          <Button variant="ghost" onClick={onClose}>Cancel</Button>
-          <Button
+          <SaveButton
             onClick={handleSave}
-            disabled={createMutation.isPending || updateMutation.isPending}
-            className="gap-1.5"
-          >
-            <HugeiconsIcon icon={CheckmarkCircle01Icon} size={14} />
-            {isCreating ? "Create" : "Save"}
-          </Button>
+            isPending={createMutation.isPending || updateMutation.isPending}
+            isCreate={isCreating}
+            onCancel={onClose}
+          />
         </DialogFooter>
       </DialogContent>
     </Dialog>

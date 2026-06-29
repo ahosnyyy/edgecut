@@ -24,7 +24,6 @@ import {
   ScissorIcon,
   FolderIcon,
   Home13Icon,
-  Grid02Icon,
   PackageIcon,
   SlidersVerticalIcon,
   DashboardSquare02Icon,
@@ -57,11 +56,6 @@ const catalogNav: NavItem[] = [
     title: "Apartment Types",
     url: "/apartment-templates",
     icon: <HugeiconsIcon icon={Home13Icon} strokeWidth={2} className="size-4" />,
-  },
-  {
-    title: "Piece Templates",
-    url: "/piece-templates",
-    icon: <HugeiconsIcon icon={Grid02Icon} strokeWidth={2} className="size-4" />,
   },
   {
     title: "Profile Systems",

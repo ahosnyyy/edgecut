@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { eq, inArray } from "drizzle-orm";
 import { getDb } from "../db/client.js";
-import { stockCatalog } from "../db/schema.js";
+import { stockCatalog, stock, projects } from "../db/schema.js";
 import type { Env } from "../index.js";
 
 export const stockCatalogRoutes = new Hono<{ Bindings: Env }>();
@@ -85,6 +85,41 @@ stockCatalogRoutes.put("/:id", async (c) => {
     .where(eq(stockCatalog.id, id));
 
   return c.json({ id, updated: true });
+});
+
+// ─── GET /api/stock-catalog/:id/usage — Check references before delete ────────
+
+stockCatalogRoutes.get("/:id/usage", async (c) => {
+  const db = getDb(c.env);
+  const id = c.req.param("id");
+
+  const refs = await db
+    .select({
+      stockId: stock.id,
+      projectId: stock.projectId,
+      projectName: projects.name,
+      label: stock.label,
+    })
+    .from(stock)
+    .innerJoin(projects, eq(stock.projectId, projects.id))
+    .where(eq(stock.sourceDefaultId, id));
+
+  const uniqueProjects = new Map<string, { name: string; count: number }>();
+  for (const r of refs) {
+    if (!uniqueProjects.has(r.projectId)) {
+      uniqueProjects.set(r.projectId, { name: r.projectName, count: 0 });
+    }
+    uniqueProjects.get(r.projectId)!.count++;
+  }
+
+  const references = Array.from(uniqueProjects.entries()).map(([pid, info]) => ({
+    type: "project" as const,
+    id: pid,
+    name: info.name,
+    detail: `${info.count} stock entr${info.count === 1 ? "y" : "ies"}`,
+  }));
+
+  return c.json({ canDelete: references.length === 0, references });
 });
 
 // ─── DELETE /api/stock-catalog/:id — Delete stock catalog entry ───────────────

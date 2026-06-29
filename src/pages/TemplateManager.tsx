@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import {
   useTemplates,
   useTemplate,
@@ -8,6 +8,7 @@ import {
   useDuplicateTemplate,
   type TemplateDetail,
 } from "../hooks/useTemplates";
+import { useProfileTypes } from "../hooks/useProfileTypes";
 import { Button } from "../components/ui/button";
 import { Card, CardAction, CardDescription, CardFooter, CardHeader, CardTitle } from "../components/ui/card";
 import { Input } from "../components/ui/input";
@@ -40,6 +41,8 @@ import {
 } from "../components/ui/alert-dialog";
 import { ScrollArea } from "../components/ui/scroll-area";
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "../components/ui/empty";
+import { LoadingState, CardSkeletonGrid, DialogLoadingState } from "../components/ui/loading-states";
+import { SaveButton, DeleteGuardDialog } from "../components/ui/action-buttons";
 import {
   Table,
   TableBody,
@@ -50,6 +53,7 @@ import {
 } from "../components/ui/table";
 import { evaluateFormula, type FormulaContext } from "../engine/formula";
 import { generatePieces } from "../engine/pieceGenerator";
+import { UNITS } from "../engine/units";
 import { useProfileSystems, type SystemConstant, type DefaultPiece } from "../hooks/useProfileSystems";
 import {
   Add01Icon,
@@ -60,12 +64,12 @@ import {
   Delete02Icon,
   PencilEdit01Icon,
   CheckmarkCircle01Icon,
-  Search01Icon,
   FilterIcon,
   Grid02Icon,
   Download04Icon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
+import { useSettings } from "../hooks/useSettings";
 
 interface PieceRow {
   id: string;
@@ -115,14 +119,28 @@ function templateFromDetail(detail: TemplateDetail): {
   };
 }
 
-export default function TemplateManager() {
+export default function TemplateManager({
+  search: searchProp,
+  setSearch: setSearchProp,
+  filterType: filterTypeProp,
+  setFilterType: setFilterTypeProp,
+}: {
+  search?: string;
+  setSearch?: (v: string) => void;
+  filterType?: string;
+  setFilterType?: (v: string) => void;
+} = {}) {
   const { data: templates, isLoading } = useTemplates();
   const { data: profileSystemsList } = useProfileSystems();
   const [editingId, setEditingId] = useState<string | null>(null);
   const [isCreating, setIsCreating] = useState(false);
-  const [deleteId, setDeleteId] = useState<string | null>(null);
-  const [search, setSearch] = useState("");
-  const [filterType, setFilterType] = useState<string>("all");
+  const deleteMutation = useDeleteTemplate();
+  const [internalSearch, setInternalSearch] = useState("");
+  const [internalFilterType, setInternalFilterType] = useState<string>("all");
+  const search = searchProp ?? internalSearch;
+  const setSearch = setSearchProp ?? setInternalSearch;
+  const filterType = filterTypeProp ?? internalFilterType;
+  const setFilterType = setFilterTypeProp ?? setInternalFilterType;
 
   const { data: editingDetail } = useTemplate(editingId);
 
@@ -160,54 +178,10 @@ export default function TemplateManager() {
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
-      <div className="flex items-center justify-between gap-3 px-4 py-3 shrink-0">
-        <div className="flex items-center gap-2">
-          <h1 className="text-lg font-semibold">Piece Templates</h1>
-          {templates && templates.length > 0 && (
-            <Badge variant="secondary" className="text-xs">
-              {templates.length}
-            </Badge>
-          )}
-        </div>
-        <div className="flex items-center gap-2">
-          <div className="relative">
-            <HugeiconsIcon
-              icon={Search01Icon}
-              size={14}
-              className="absolute left-2 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none"
-            />
-            <Input
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search by name..."
-              className="w-48 pl-7 text-xs"
-            />
-          </div>
-          <Select
-            value={filterType}
-            onValueChange={(v) => setFilterType(v ?? "all")}
-          >
-            <SelectTrigger className="w-32 h-8 text-xs gap-1.5">
-              <HugeiconsIcon icon={FilterIcon} size={14} className="text-muted-foreground" />
-              <SelectValue>
-                {filterType === "all" ? "All Types" : filterType === "window" ? "Windows" : "Doors"}
-              </SelectValue>
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Types</SelectItem>
-              <SelectItem value="window">Windows</SelectItem>
-              <SelectItem value="door">Doors</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-      </div>
-
       <ScrollArea className="flex-1">
-        <div className="p-4">
+        <div className="px-4 py-2">
           {isLoading ? (
-            <div className="text-center text-sm text-muted-foreground py-8">
-              Loading templates...
-            </div>
+            <LoadingState label="Loading templates..." />
           ) : filtered.length === 0 ? (
             search.trim() || filterType !== "all" ? (
               <Empty>
@@ -277,14 +251,29 @@ export default function TemplateManager() {
                         >
                           <HugeiconsIcon icon={PencilEdit01Icon} size={13} />
                         </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="h-6 w-6 p-0 text-muted-foreground hover:text-destructive opacity-0 group-hover:opacity-100"
-                          onClick={(e) => { e.stopPropagation(); setDeleteId(tpl.id); }}
-                        >
-                          <HugeiconsIcon icon={Delete02Icon} size={13} />
-                        </Button>
+                        {!tpl.isBuiltin && (
+                          <span onClick={(e) => e.stopPropagation()}>
+                          <DeleteGuardDialog
+                            trigger={
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-6 w-6 p-0 text-muted-foreground hover:text-destructive opacity-0 group-hover:opacity-100"
+                              >
+                                <HugeiconsIcon icon={Delete02Icon} size={13} />
+                              </Button>
+                            }
+                            usageCheckUrl={`/api/templates/${tpl.id}/usage`}
+                            title="Delete this template?"
+                            description="This will permanently remove the piece template and its variables and pieces."
+                            entityName={tpl.name}
+                            onConfirm={async () => {
+                              await deleteMutation.mutateAsync(tpl.id);
+                            }}
+                            isPending={deleteMutation.isPending}
+                          />
+                          </span>
+                        )}
                       </div>
                     </CardAction>
                     <CardTitle className="text-sm truncate flex items-center gap-1.5">
@@ -338,51 +327,7 @@ export default function TemplateManager() {
         />
       )}
 
-      <AlertDialog
-        open={!!deleteId}
-        onOpenChange={(open) => !open && setDeleteId(null)}
-      >
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Delete template?</AlertDialogTitle>
-            <AlertDialogDescription>
-              This action cannot be undone. The template and all its variables
-              and pieces will be permanently removed.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <DeleteConfirmAction deleteId={deleteId} onDone={() => setDeleteId(null)} />
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
     </div>
-  );
-}
-
-function DeleteConfirmAction({
-  deleteId,
-  onDone,
-}: {
-  deleteId: string | null;
-  onDone: () => void;
-}) {
-  const deleteMutation = useDeleteTemplate();
-  return (
-    <AlertDialogAction
-      className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-      onClick={async () => {
-        if (!deleteId) return;
-        try {
-          await deleteMutation.mutateAsync(deleteId);
-          onDone();
-        } catch {
-          // error handled by mutation
-        }
-      }}
-    >
-      Delete
-    </AlertDialogAction>
   );
 }
 
@@ -403,12 +348,20 @@ function TemplateEditor({
   const updateMutation = useUpdateTemplate();
   const duplicateMutation = useDuplicateTemplate();
   const { data: profileSystemsList } = useProfileSystems();
+  const { data: profileTypes } = useProfileTypes();
 
   const [form, setForm] = useState(() => {
     if (detail) return templateFromDetail(detail);
     return emptyTemplate();
   });
 
+  useEffect(() => {
+    if (detail) {
+      setForm(templateFromDetail(detail));
+    }
+  }, [detail]);
+
+  const { toMM: convertToMM, fromMM: convertFromMM, unitLabel, displayUnit } = useSettings();
   const [previewW, setPreviewW] = useState(120);
   const [previewH, setPreviewH] = useState(140);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -430,7 +383,7 @@ function TemplateEditor({
 
   // Build formula context with system constants
   const formulaCtx = useMemo((): FormulaContext => {
-    const ctx: FormulaContext = { W: previewW * 100, H: previewH * 100 };
+    const ctx: FormulaContext = { W: convertToMM(previewW), H: convertToMM(previewH) };
     for (const c of systemConstants) {
       ctx[c.name] = c.defaultValue;
     }
@@ -442,7 +395,7 @@ function TemplateEditor({
       ...p,
       id: p.id || crypto.randomUUID(),
     }));
-    return generatePieces(piecesWithIds, systemConstants, previewW * 100, previewH * 100);
+    return generatePieces(piecesWithIds, systemConstants, convertToMM(previewW), convertToMM(previewH));
   }, [form.pieces, systemConstants, previewW, previewH]);
 
   const formulaErrors = useMemo(() => {
@@ -524,9 +477,7 @@ function TemplateEditor({
     return (
       <Dialog open={true} onOpenChange={onClose}>
         <DialogContent className="sm:max-w-3xl">
-          <div className="py-8 text-center text-sm text-muted-foreground">
-            Loading template...
-          </div>
+          <DialogLoadingState label="Loading template..." />
         </DialogContent>
       </Dialog>
     );
@@ -607,7 +558,7 @@ function TemplateEditor({
             <div className="flex flex-wrap gap-1">
               {systemConstants.map((c) => (
                 <Badge key={c.name} variant="secondary" className="text-[9px] h-4 px-1.5 font-mono">
-                  {c.name}={c.defaultValue}
+                  {c.name}={convertFromMM(c.defaultValue).toFixed(UNITS[displayUnit as keyof typeof UNITS]?.decimals ?? 0)}
                 </Badge>
               ))}
             </div>
@@ -616,75 +567,71 @@ function TemplateEditor({
 
         <Separator className="shrink-0" />
 
+       
+
+        {/* Fixed pieces header */}
+        <div className="flex items-center justify-between shrink-0">
+          <div className="flex items-center gap-2">
+            <h3 className="text-sm font-semibold">Cutting Pieces</h3>
+            {form.pieces.length > 0 && (
+              <Badge variant="secondary" className="text-[10px] h-4 px-1.5">
+                {form.pieces.length}
+              </Badge>
+            )}
+          </div>
+          {!isBuiltin && (
+            <div className="flex items-center gap-1.5">
+              {form.profileSystemId && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-7 gap-1 text-xs"
+                  onClick={() => {
+                    const sys = profileSystemsList?.find((s) => s.id === form.profileSystemId);
+                    if (!sys?.defaultPieces) return;
+                    try {
+                      const pieces = JSON.parse(sys.defaultPieces) as DefaultPiece[];
+                      if (pieces.length === 0) return;
+                      const replace = form.pieces.length === 0 || window.confirm(
+                        `Replace existing ${form.pieces.length} piece(s) with ${pieces.length} default piece(s) from ${sys.name}?`
+                      );
+                      if (!replace) return;
+                      setForm((f) => ({
+                        ...f,
+                        pieces: pieces.map((p) => ({
+                          id: crypto.randomUUID(),
+                          label: p.label,
+                          profileType: p.profileType as PieceRow["profileType"],
+                          lengthFormula: p.lengthFormula,
+                          quantity: p.quantity,
+                        })),
+                      }));
+                    } catch {
+                      // ignore parse errors
+                    }
+                  }}
+                >
+                  <HugeiconsIcon icon={Download04Icon} size={12} />
+                  Load from System
+                </Button>
+              )}
+              <Button variant="outline" size="sm" className="h-7 gap-1 text-xs" onClick={addPiece}>
+                <HugeiconsIcon icon={Add01Icon} size={12} />
+                Add Piece
+              </Button>
+            </div>
+          )}
+        </div>
+        {/* Fixed description */}
+        <p className="text-[11px] text-muted-foreground shrink-0">
+          Use <code className="font-mono text-[10px] px-1 py-0.5 rounded bg-muted">W</code> for opening width and <code className="font-mono text-[10px] px-1 py-0.5 rounded bg-muted">H</code> for opening height. All values are in {unitLabel}.
+        </p>
+
         {/* Scrollable content: pieces + preview */}
         <div className="flex flex-col gap-3 overflow-y-auto pr-1">
 
           {/* Pieces */}
           <div className="flex flex-col gap-2">
-            <div className="flex items-center justify-between shrink-0">
-              <div className="flex items-center gap-2">
-                <h3 className="text-sm font-semibold">Cutting Pieces</h3>
-                {form.pieces.length > 0 && (
-                  <Badge variant="secondary" className="text-[10px] h-4 px-1.5">
-                    {form.pieces.length}
-                  </Badge>
-                )}
-              </div>
-              {!isBuiltin && (
-                <div className="flex items-center gap-1.5">
-                  {form.profileSystemId && (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="h-7 gap-1 text-xs"
-                      onClick={() => {
-                        const sys = profileSystemsList?.find((s) => s.id === form.profileSystemId);
-                        if (!sys?.defaultPieces) return;
-                        try {
-                          const pieces = JSON.parse(sys.defaultPieces) as DefaultPiece[];
-                          if (pieces.length === 0) return;
-                          const replace = form.pieces.length === 0 || window.confirm(
-                            `Replace existing ${form.pieces.length} piece(s) with ${pieces.length} default piece(s) from ${sys.name}?`
-                          );
-                          if (!replace) return;
-                          setForm((f) => ({
-                            ...f,
-                            pieces: pieces.map((p) => ({
-                              id: crypto.randomUUID(),
-                              label: p.label,
-                              profileType: p.profileType as PieceRow["profileType"],
-                              lengthFormula: p.lengthFormula,
-                              quantity: p.quantity,
-                            })),
-                          }));
-                        } catch {
-                          // ignore parse errors
-                        }
-                      }}
-                    >
-                      <HugeiconsIcon icon={Download04Icon} size={12} />
-                      Load from System
-                    </Button>
-                  )}
-                  <Button variant="outline" size="sm" className="h-7 gap-1 text-xs" onClick={addPiece}>
-                    <HugeiconsIcon icon={Add01Icon} size={12} />
-                    Add Piece
-                  </Button>
-                </div>
-              )}
-            </div>
-            <p className="text-[11px] text-muted-foreground -mt-1">
-              Use <code className="font-mono text-[10px] px-1 py-0.5 rounded bg-muted">W</code> for opening width and <code className="font-mono text-[10px] px-1 py-0.5 rounded bg-muted">H</code> for opening height (in cm).
-              {systemConstants.length > 0 && (
-                <> System constants: {systemConstants.map((c) => (
-                  <code key={c.name} className="font-mono text-[10px] px-1 py-0.5 rounded bg-muted">{c.name}</code>
-                )).reduce<React.ReactNode[]>((acc, el, i) => {
-                  if (i > 0) acc.push(", ");
-                  acc.push(el);
-                  return acc;
-                }, [])}.</>
-              )}
-            </p>
             <div className="flex flex-col gap-1.5">
               {form.pieces.map((p, i) => (
                 <div key={i} className="flex items-center gap-2 rounded-md border bg-muted/30 px-2 py-1.5">
@@ -701,17 +648,15 @@ function TemplateEditor({
                     onValueChange={(v: PieceRow["profileType"] | null) => updatePiece(i, "profileType", v ?? "frame")}
                     disabled={isBuiltin}
                   >
-                    <SelectTrigger className="text-xs h-7 w-24 border-0 bg-background shrink-0 capitalize">
+                    <SelectTrigger className="text-xs h-7 w-24 border-0 bg-background shrink-0">
                       <SelectValue>
-                        {p.profileType}
+                        {profileTypes?.find((pt) => pt.key === p.profileType)?.label ?? p.profileType}
                       </SelectValue>
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="frame">Frame</SelectItem>
-                      <SelectItem value="sash">Sash</SelectItem>
-                      <SelectItem value="mullion">Mullion</SelectItem>
-                      <SelectItem value="bead">Bead</SelectItem>
-                      <SelectItem value="custom">Custom</SelectItem>
+                      {(profileTypes ?? []).map((pt) => (
+                        <SelectItem key={pt.key} value={pt.key}>{pt.label}</SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                   <Input
@@ -774,7 +719,7 @@ function TemplateEditor({
                     onChange={(e) => setPreviewW(parseFloat(e.target.value) || 0)}
                     className="w-20 text-xs h-7"
                   />
-                  <span className="text-[10px] text-muted-foreground">cm</span>
+                  <span className="text-[10px] text-muted-foreground">{unitLabel}</span>
                 </div>
                 <div className="flex items-center gap-1.5">
                   <Label className="text-xs text-muted-foreground">H</Label>
@@ -784,7 +729,7 @@ function TemplateEditor({
                     onChange={(e) => setPreviewH(parseFloat(e.target.value) || 0)}
                     className="w-20 text-xs h-7"
                   />
-                  <span className="text-[10px] text-muted-foreground">cm</span>
+                  <span className="text-[10px] text-muted-foreground">{unitLabel}</span>
                 </div>
               </div>
             </div>
@@ -794,7 +739,7 @@ function TemplateEditor({
                   <TableRow>
                     <TableHead className="h-7 text-xs">Label</TableHead>
                     <TableHead className="h-7 text-xs">Profile</TableHead>
-                    <TableHead className="h-7 text-xs text-right">Length (cm)</TableHead>
+                    <TableHead className="h-7 text-xs text-right">Length ({unitLabel})</TableHead>
                     <TableHead className="h-7 text-xs text-right">Qty</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -802,8 +747,8 @@ function TemplateEditor({
                   {previewPieces.pieces.map((p, i) => (
                     <TableRow key={i}>
                       <TableCell className="text-xs py-1.5">{p.label}</TableCell>
-                      <TableCell className="text-xs py-1.5 capitalize">{p.profileType}</TableCell>
-                      <TableCell className="text-xs py-1.5 text-right font-mono">{(p.length / 100).toFixed(1)}</TableCell>
+                      <TableCell className="text-xs py-1.5">{profileTypes?.find((pt) => pt.key === p.profileType)?.label ?? p.profileType}</TableCell>
+                      <TableCell className="text-xs py-1.5 text-right font-mono">{convertFromMM(p.length).toFixed(1)}</TableCell>
                       <TableCell className="text-xs py-1.5 text-right">{p.quantity}</TableCell>
                     </TableRow>
                   ))}
@@ -824,9 +769,9 @@ function TemplateEditor({
                   {previewPieces.pieces.length > 0 && (
                     <TableRow className="border-t-2 font-medium bg-muted/30">
                       <TableCell className="text-xs py-1.5">Total</TableCell>
-                      <TableCell className="text-xs py-1.5 text-muted-foreground">{previewPieces.pieces.reduce((s, p) => s + p.quantity, 0)} cuts</TableCell>
-                      <TableCell className="text-xs py-1.5 text-right font-mono">{(previewPieces.pieces.reduce((s, p) => s + p.length * p.quantity, 0) / 100).toFixed(1)}</TableCell>
-                      <TableCell className="text-xs py-1.5 text-right">—</TableCell>
+                      <TableCell className="text-xs py-1.5 text-muted-foreground"></TableCell>
+                      <TableCell className="text-xs py-1.5 text-right font-mono"></TableCell>
+                      <TableCell className="text-xs py-1.5 text-right">{previewPieces.pieces.reduce((s, p) => s + p.quantity, 0)} cuts</TableCell>
                     </TableRow>
                   )}
                 </TableBody>
@@ -853,15 +798,13 @@ function TemplateEditor({
             </>
           ) : (
             <>
-              <Button variant="ghost" onClick={onClose}>Cancel</Button>
-              <Button
+              <SaveButton
                 onClick={handleSave}
-                disabled={createMutation.isPending || updateMutation.isPending || hasErrors}
-                className="gap-1.5"
-              >
-                <HugeiconsIcon icon={CheckmarkCircle01Icon} size={14} />
-                {isCreating ? "Create" : "Save"}
-              </Button>
+                isPending={createMutation.isPending || updateMutation.isPending}
+                isCreate={isCreating}
+                disabled={hasErrors}
+                onCancel={onClose}
+              />
             </>
           )}
         </DialogFooter>

@@ -24,7 +24,7 @@ export const projects = sqliteTable("projects", {
   notes: text("notes"),
   floors: integer("floors").notNull().default(1),
   apartmentsPerFloor: integer("apartments_per_floor").notNull().default(1),
-  apartmentLabels: text("apartment_labels").notNull().default("[]"),
+  floorLabels: text("floor_labels").notNull().default("[]"),
   // Optimizer settings
   measurementSystem: text("measurement_system", {
     enum: ["metric", "imperial"],
@@ -95,7 +95,7 @@ export const buildings = sqliteTable("buildings", {
   name: text("name").notNull(),
   floors: integer("floors").notNull().default(1),
   apartmentsPerFloor: integer("apartments_per_floor").notNull().default(1),
-  apartmentLabels: text("apartment_labels").notNull().default("[]"),
+  floorLabels: text("floor_labels").notNull().default("[]"),
   sortOrder: integer("sort_order").notNull().default(0),
   status: text("status", {
     enum: ["draft", "active", "completed", "archived"],
@@ -224,6 +224,17 @@ export const projectOpeningSizes = sqliteTable("project_opening_sizes", {
 });
 
 // ─── Profile Systems (defines cutting constants per manufacturer/series) ─────
+
+export const profileTypes = sqliteTable("profile_types", {
+  id: text("id").primaryKey(),
+  key: text("key").notNull().unique(),
+  label: text("label").notNull(),
+  sortOrder: integer("sort_order").notNull().default(0),
+  isReserved: integer("is_reserved", { mode: "boolean" })
+    .notNull()
+    .default(false),
+  createdAt: integer("created_at").notNull(),
+});
 
 export const profileSystems = sqliteTable("profile_systems", {
   id: text("id").primaryKey(),

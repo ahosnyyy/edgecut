@@ -9,7 +9,7 @@ export interface Project {
   notes: string | null;
   floors: number;
   apartmentsPerFloor: number;
-  apartmentLabels: string;
+  floorLabels: string;
   buildingCount: number;
   completedBuildings: number;
   // Optimizer settings
@@ -29,7 +29,7 @@ export interface Building {
   name: string;
   floors: number;
   apartmentsPerFloor: number;
-  apartmentLabels: string;
+  floorLabels: string;
   sortOrder: number;
   status: "draft" | "active" | "completed" | "archived";
   createdAt: number;
@@ -152,7 +152,7 @@ export function useCreateBuilding() {
         name: string;
         floors?: number;
         apartmentsPerFloor?: number;
-        apartmentLabels?: string[];
+        floorLabels?: string[];
       };
     }) =>
       apiFetch<{ id: string }>(`/api/projects/${projectId}/buildings`, {
@@ -176,7 +176,7 @@ export function useUpdateBuilding() {
       projectId: string;
       buildingId: string;
       data: Partial<Pick<Building, "name" | "floors" | "apartmentsPerFloor" | "status">> & {
-        apartmentLabels?: string[];
+        floorLabels?: string[];
       };
     }) =>
       apiFetch<{ id: string }>(`/api/projects/${projectId}/buildings/${buildingId}`, {

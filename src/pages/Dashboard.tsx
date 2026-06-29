@@ -4,6 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card"
 import { Button } from "../components/ui/button";
 import { Badge } from "../components/ui/badge";
 import { ScrollArea } from "../components/ui/scroll-area";
+import { LoadingState } from "../components/ui/loading-states";
 import { HugeiconsIcon } from "@hugeicons/react";
 import {
   FolderIcon,
@@ -16,12 +17,14 @@ import {
 import { useProjects } from "../hooks/useProjects";
 import { useStockCoverage } from "../hooks/useDashboard";
 import { useAuth } from "../auth/useAuth";
+import { useSettings } from "../hooks/useSettings";
 
 export default function Dashboard() {
   const navigate = useNavigate();
-  const { data: projects } = useProjects();
-  const { data: coverage } = useStockCoverage();
+  const { data: projects, isLoading: projectsLoading } = useProjects();
+  const { data: coverage, isLoading: coverageLoading } = useStockCoverage();
   const { user } = useAuth();
+  const { formatLength, unitLabel } = useSettings();
 
   const projectStats = useMemo(() => {
     const list = projects ?? [];
@@ -60,8 +63,10 @@ export default function Dashboard() {
         <div className="p-4 flex flex-col gap-4">
 
       {/* KPI Cards */}
+      {projectsLoading ? (
+        <LoadingState label="Loading dashboard..." />
+      ) : (
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        {/* Welcome */}
         <Card className="relative overflow-hidden bg-gradient-to-br from-stone-200/40 to-stone-300/30 border-stone-300/40">
           <div className="absolute inset-0 opacity-[0.08]" style={{ backgroundImage: "radial-gradient(circle, currentColor 1px, transparent 1px)", backgroundSize: "20px 20px" }} />
           <CardContent className="relative pt-5 pb-5 flex flex-col gap-3 justify-between h-full">
@@ -139,8 +144,12 @@ export default function Dashboard() {
         </Card>
 
       </div>
+      )}
 
       {/* Stock Coverage */}
+      {!projectsLoading && coverageLoading ? (
+        <LoadingState label="Loading stock coverage..." />
+      ) : !projectsLoading && (
       <Card>
         <CardHeader className="flex flex-row items-center justify-between">
           <div className="flex items-center gap-2">
@@ -247,7 +256,7 @@ export default function Dashboard() {
                               {/* Have / Need */}
                               <div className="flex items-center justify-between text-[10px] text-muted-foreground">
                                 <span className="tabular-nums">
-                                  {(d.availableLength / 100).toFixed(0)} / {(d.demandLength / 100).toFixed(0)} cm
+                                  {formatLength(d.availableLength, false)} / {formatLength(d.demandLength, false)} {unitLabel}
                                 </span>
                                 <span className={
                                   "tabular-nums font-medium " +
@@ -260,11 +269,11 @@ export default function Dashboard() {
                               {/* Bars to cover */}
                               {d.deficitBars > 0 && (
                                 <div className="flex items-center gap-1.5 rounded bg-destructive/10 px-2 py-1 text-[9px] text-destructive font-medium">
-                                  <span className="tabular-nums">−{((d.demandLength - d.availableLength) / 100).toFixed(0)}cm</span>
+                                  <span className="tabular-nums">−{formatLength(d.demandLength - d.availableLength, false)}{unitLabel}</span>
                                   <span className="text-destructive/40">·</span>
                                   <span className="tabular-nums">{d.deficitBars} bar{d.deficitBars !== 1 ? "s" : ""}</span>
                                   <span className="text-destructive/40">×</span>
-                                  <span className="tabular-nums">{(d.barLength / 100).toFixed(0)}cm</span>
+                                  <span className="tabular-nums">{formatLength(d.barLength, false)}{unitLabel}</span>
                                 </div>
                               )}
                             </div>
@@ -279,6 +288,7 @@ export default function Dashboard() {
           )}
         </CardContent>
       </Card>
+      )}
         </div>
       </ScrollArea>
     </div>

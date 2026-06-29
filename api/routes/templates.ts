@@ -6,6 +6,8 @@ import {
   templateVariables,
   templatePieces,
   profileSystems,
+  apartmentTemplateOpenings,
+  apartmentTemplates,
 } from "../db/schema.js";
 import type { Env } from "../index.js";
 
@@ -231,6 +233,38 @@ templatesRoutes.put("/:id", async (c) => {
   }
 
   return c.json({ id, updated: true });
+});
+
+// ─── GET /api/templates/:id/usage — Check references before delete ──────────
+
+templatesRoutes.get("/:id/usage", async (c) => {
+  const db = getDb(c.env);
+  const id = c.req.param("id");
+
+  const refs = await db
+    .select({
+      aptTemplateId: apartmentTemplateOpenings.apartmentTemplateId,
+      aptTemplateName: apartmentTemplates.name,
+    })
+    .from(apartmentTemplateOpenings)
+    .innerJoin(
+      apartmentTemplates,
+      eq(apartmentTemplateOpenings.apartmentTemplateId, apartmentTemplates.id)
+    )
+    .where(eq(apartmentTemplateOpenings.pieceTemplateId, id));
+
+  const uniqueAptTemplates = new Map<string, string>();
+  for (const r of refs) {
+    uniqueAptTemplates.set(r.aptTemplateId, r.aptTemplateName);
+  }
+
+  const references = Array.from(uniqueAptTemplates.entries()).map(([tid, name]) => ({
+    type: "apartment_template" as const,
+    id: tid,
+    name,
+  }));
+
+  return c.json({ canDelete: references.length === 0, references });
 });
 
 // ─── DELETE /api/templates/:id — Delete template ─────────────────────────────
