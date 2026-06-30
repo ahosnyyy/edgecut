@@ -67,7 +67,7 @@ export type AppState = {
   settings: Settings;
   stockLengths: Stock[];
   demandPieces: Piece[];
-  cuttingPlan: { bars: Bar[]; summary: any } | null;
+  cuttingPlan: { bars: Bar[]; summary: any; unplaced?: any } | null;
   overrides: Record<string, any>;
   validationErrors: string[];
   isOptimized: boolean;
@@ -130,12 +130,14 @@ export const ACTIONS = {
   UPDATE_STOCK: 'UPDATE_STOCK',
   REMOVE_STOCK: 'REMOVE_STOCK',
   MERGE_DUPLICATE_STOCK: 'MERGE_DUPLICATE_STOCK',
+  SET_STOCK_LENGTHS: 'SET_STOCK_LENGTHS',
 
   // Demand pieces
   ADD_PIECE: 'ADD_PIECE',
   UPDATE_PIECE: 'UPDATE_PIECE',
   REMOVE_PIECE: 'REMOVE_PIECE',
   MERGE_DUPLICATE_PIECES: 'MERGE_DUPLICATE_PIECES',
+  SET_DEMAND_PIECES: 'SET_DEMAND_PIECES',
 
   // Optimization
   RUN_OPTIMIZE: 'RUN_OPTIMIZE',
@@ -273,6 +275,14 @@ function _appReducer(state: AppState, action: any): AppState {
         cuttingPlan: null,
       };
 
+    case ACTIONS.SET_STOCK_LENGTHS:
+      return {
+        ...state,
+        stockLengths: action.payload,
+        isOptimized: false,
+        cuttingPlan: null,
+      };
+
     case ACTIONS.MERGE_DUPLICATE_STOCK: {
       // Fold stock sharing the same length AND remnant status into the first
       // occurrence, summing quantities (Infinity stays Infinity). Remnants are
@@ -282,7 +292,6 @@ function _appReducer(state: AppState, action: any): AppState {
       const scope = action.payload?.isRemnant; // boolean | undefined
       const merged: Stock[] = [];
       const firstIndexByKey = new Map<string, number>(); // `${mm}|${isRemnant}` -> index in merged
-
       for (const stock of state.stockLengths) {
         const inScope = scope === undefined || (!!stock.isRemnant === scope);
         if (!inScope) {
@@ -411,6 +420,14 @@ function _appReducer(state: AppState, action: any): AppState {
         cuttingPlan: null,
       };
     }
+
+    case ACTIONS.SET_DEMAND_PIECES:
+      return {
+        ...state,
+        demandPieces: action.payload,
+        isOptimized: false,
+        cuttingPlan: null,
+      };
 
     // ── Optimization ──
     case ACTIONS.RUN_OPTIMIZE: {

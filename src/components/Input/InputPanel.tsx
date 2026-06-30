@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useApp, ACTIONS } from '../../context/AppContext';
 import { fromMM, toMM, formatLength, UNITS, MEASUREMENT_SYSTEMS } from '../../engine/units';
+import { useSettings } from '../../hooks/useSettings';
 import { Add01Icon, Delete02Icon, RulerIcon, DollarSignIcon, Recycle01Icon, CombineIcon, Alert02Icon } from '@hugeicons/core-free-icons';
 import { HugeiconsIcon } from '@hugeicons/react';
 import { Input } from '../ui/input';
@@ -122,21 +123,35 @@ export function StockPanel() {
 
 export function SettingsPanel() {
   const { state, dispatch } = useApp();
-  const { unit, measurementSystem, kerfWidth, pricePerBar, optimizationStrategy = 'maximize_large_bars' } = state.settings;
+  const { unit, measurementSystem, pricePerBar } = state.settings;
+  const { kerfWidth: globalKerf, optimizationStrategy: globalStrategy, setKerfWidth, setOptimizationStrategy, displayUnit, fromMM: settingsFromMM, toMM: settingsToMM, unitLabel } = useSettings();
+
+  // Sync global settings to AppContext so the optimizer can use them
+  useEffect(() => {
+    if (state.settings.kerfWidth !== globalKerf) {
+      dispatch({ type: ACTIONS.SET_KERF, payload: globalKerf });
+    }
+  }, [globalKerf]);
+
+  useEffect(() => {
+    if (state.settings.optimizationStrategy !== globalStrategy) {
+      dispatch({ type: ACTIONS.SET_OPTIMIZATION_STRATEGY, payload: globalStrategy });
+    }
+  }, [globalStrategy]);
 
   const [kerfStr, setKerfStr] = useState('');
   const [priceStr, setPriceStr] = useState('');
 
   useEffect(() => {
-    queueMicrotask(() => setKerfStr(String(fromMM(kerfWidth, unit))));
-  }, [kerfWidth, unit]);
+    queueMicrotask(() => setKerfStr(String(settingsFromMM(globalKerf))));
+  }, [globalKerf, settingsFromMM]);
 
   useEffect(() => {
     queueMicrotask(() => setPriceStr(pricePerBar ? String(pricePerBar) : ''));
   }, [pricePerBar]);
 
   const handleKerfFocus = () => {
-    setKerfStr(String(fromMM(kerfWidth, unit)));
+    setKerfStr(String(settingsFromMM(globalKerf)));
   };
 
   const handlePriceFocus = () => {
@@ -194,7 +209,7 @@ export function SettingsPanel() {
       <div className="grid grid-cols-2 gap-3">
         <div className="space-y-1.5">
           <Label htmlFor="kerf-input" className="text-xs text-muted-foreground flex items-center gap-1.5">
-            <HugeiconsIcon icon={RulerIcon} size={12} /> Kerf ({unit})
+            <HugeiconsIcon icon={RulerIcon} size={12} /> Kerf ({unitLabel})
           </Label>
           <Input
             id="kerf-input"
@@ -208,13 +223,16 @@ export function SettingsPanel() {
               setKerfStr(raw);
               const val = parseFloat(raw);
               if (!isNaN(val) && val >= 0) {
-                dispatch({ type: ACTIONS.SET_KERF, payload: toMM(val, unit) });
+                const mm = settingsToMM(val);
+                setKerfWidth(mm);
+                dispatch({ type: ACTIONS.SET_KERF, payload: mm });
               }
             }}
             onBlur={() => {
               const val = parseFloat(kerfStr);
               if (isNaN(val) || val < 0) {
-                setKerfStr(String(fromMM(5, unit)));
+                setKerfStr(String(settingsFromMM(5)));
+                setKerfWidth(5);
                 dispatch({ type: ACTIONS.SET_KERF, payload: 5 });
               }
             }}
@@ -258,12 +276,15 @@ export function SettingsPanel() {
       <div className="space-y-1.5">
         <Label className="text-xs text-muted-foreground">Optimization Goal</Label>
         <Select
-          value={optimizationStrategy}
-          onValueChange={(v: any) => dispatch({ type: ACTIONS.SET_OPTIMIZATION_STRATEGY, payload: v })}
+          value={globalStrategy}
+          onValueChange={(v: any) => {
+            setOptimizationStrategy(v);
+            dispatch({ type: ACTIONS.SET_OPTIMIZATION_STRATEGY, payload: v });
+          }}
         >
           <SelectTrigger className="w-full">
             <SelectValue>
-              {optimizationStrategy === 'maximize_large_bars' ? 'Maximize Large Bars (Default)' : 'Spread Waste'}
+              {globalStrategy === 'maximize_large_bars' ? 'Maximize Large Bars (Default)' : 'Spread Waste'}
             </SelectValue>
           </SelectTrigger>
           <SelectContent>
@@ -272,7 +293,7 @@ export function SettingsPanel() {
           </SelectContent>
         </Select>
         <p className="text-[10px] text-muted-foreground mt-1">
-          {optimizationStrategy === 'maximize_large_bars'
+          {globalStrategy === 'maximize_large_bars'
             ? 'Fills large bars to capacity first, leaving long clean cutoffs.'
             : 'Spreads cuts to tightly pack smaller bars first.'}
         </p>

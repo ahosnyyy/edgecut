@@ -98,6 +98,42 @@ export default function QuickOptimize() {
         </div>
       )}
 
+      {/* Shortage Warning */}
+      {state.cuttingPlan?.unplaced && state.cuttingPlan.unplaced.count > 0 && (() => {
+        const unplacedLength = state.cuttingPlan.unplaced.totalLength;
+        const unplacedCount = state.cuttingPlan.unplaced.count;
+        const unplacedWithKerf = unplacedLength + unplacedCount * state.settings.kerfWidth;
+        const largestStock = [...state.stockLengths]
+          .filter((s) => s.length > 0)
+          .sort((a, b) => b.length - a.length)[0];
+        const additionalBars = largestStock
+          ? Math.ceil(unplacedWithKerf / largestStock.length)
+          : null;
+        return (
+          <div className="px-4 pt-2 no-print w-full shrink-0">
+            <Card className="border-amber-500/40 bg-amber-500/5">
+              <CardContent className="px-4 py-2 flex items-start gap-3">
+                <HugeiconsIcon
+                  icon={AlertCircleIcon}
+                  size={16}
+                  className="text-amber-600 dark:text-amber-400 shrink-0 mt-0.5"
+                />
+                <div className="flex flex-col gap-0.5">
+                  <span className="text-sm text-amber-700 dark:text-amber-300">
+                    {unplacedCount} pieces ({Math.round(unplacedLength)}mm) couldn't be placed — insufficient stock.
+                  </span>
+                  <span className="text-xs text-muted-foreground">
+                    {additionalBars !== null
+                      ? `${additionalBars}+ additional bars of ${largestStock.label || `${largestStock.length}mm`} needed · zero waste assumed`
+                      : "Add more stock bars to fit all demand pieces."}
+                  </span>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        );
+      })()}
+
       {/* Desktop: 3-Column Layout */}
       <div className="flex-1 hidden lg:flex overflow-hidden">
         {/* Left: Stock + Settings (tabbed) */}

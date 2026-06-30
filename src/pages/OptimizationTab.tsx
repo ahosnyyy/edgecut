@@ -1,0 +1,565 @@
+import { useState, useMemo, useEffect, useCallback } from "react";
+import { useQueries } from "@tanstack/react-query";
+import { apiFetch } from "../auth/apiClient";
+import { useApp, ACTIONS } from "../context/AppContext";
+import { useSettings } from "../hooks/useSettings";
+import { useProjectStock } from "../hooks/useProjects";
+import { useTemplate } from "../hooks/useTemplates";
+import { useProfileSystems, type SystemConstant } from "../hooks/useProfileSystems";
+import { useProfileTypes } from "../hooks/useProfileTypes";
+import { generatePieces, type TemplateVariable } from "../engine/pieceGenerator";
+import ResultsPanel from "../components/Results/ResultsPanel";
+import { Button } from "../components/ui/button";
+import { Card, CardContent } from "../components/ui/card";
+import { LoadingState } from "../components/ui/loading-states";
+import { HugeiconsIcon } from "@hugeicons/react";
+import {
+  SparklesIcon,
+  ArrowLeft01Icon,
+  ArrowRight01Icon,
+  AlertCircleIcon,
+  ScissorIcon,
+} from "@hugeicons/core-free-icons";
+import type { BuildingLike } from "./ProjectBuilder";
+
+interface SizeGrid {
+  [key: string]: { width: string; height: string };
+}
+
+function useProfileTypeLabel() {
+  const { data: profileTypes } = useProfileTypes();
+  return (key: string) =>
+    profileTypes?.find((pt) => pt.key === key)?.label ??
+    key.charAt(0).toUpperCase() + key.slice(1);
+}
+
+export function OptimizationTab({
+  projectId,
+  building,
+  existingAssignments,
+  existingSizes,
+  aptTemplateNames,
+  onPrev,
+  onNext,
+  hasPrev,
+  hasNext,
+}: {
+  projectId: string;
+  building: BuildingLike;
+  existingAssignments: { floor: number; apartmentIndex: number; apartmentTemplateId: string | null }[];
+  existingSizes: { apartmentTemplateOpeningId: string; floor: number; apartmentIndex: number; width: number; height: number }[];
+  aptTemplateNames: Record<string, string>;
+  onPrev?: () => void;
+  onNext?: () => void;
+  hasPrev?: boolean;
+  hasNext?: boolean;
+}) {
+  const { fromMM: convertFromMM, toMM: convertToMM, formatLength, kerfWidth, optimizationStrategy } = useSettings();
+  const profileTypeLabel = useProfileTypeLabel();
+  const { dispatch, state } = useApp();
+  const { data: stockEntries } = useProjectStock(projectId);
+
+  const floors = building.floors;
+  const apartmentsPerFloor = building.apartmentsPerFloor;
+  let floorLabels: string[] = [];
+  try { floorLabels = JSON.parse(building.floorLabels); } catch { floorLabels = []; }
+
+  // Build sizes map
+  const sizes = useMemo(() => {
+    const g: SizeGrid = {};
+    for (const s of existingSizes) {
+      g[`${s.apartmentTemplateOpeningId}_${s.floor}_${s.apartmentIndex}`] = {
+        width: String(convertFromMM(s.width)),
+        height: String(convertFromMM(s.height)),
+      };
+    }
+    return g;
+  }, [existingSizes, convertFromMM]);
+
+  // Assignment map
+  const assignmentMap = useMemo(() => {
+    const m: Record<string, string | null> = {};
+    for (const a of existingAssignments) {
+      m[`${a.floor}_${a.apartmentIndex}`] = a.apartmentTemplateId;
+    }
+    return m;
+  }, [existingAssignments]);
+
+  // Collect unique apartment template IDs
+  const usedTemplateIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const a of existingAssignments) {
+      if (a.apartmentTemplateId) ids.add(a.apartmentTemplateId);
+    }
+    return Array.from(ids);
+  }, [existingAssignments]);
+
+  // Fetch apartment templates to get openings
+  const templateQueries = useQueries({
+    queries: usedTemplateIds.map((tplId) => ({
+      queryKey: ["apartment-template", tplId],
+      queryFn: () => apiFetch<{ openings: { id: string; label: string; pieceTemplateId: string; templateName: string }[] }>(`/api/apartment-templates/${tplId}`),
+      enabled: !!tplId,
+    })),
+  });
+
+  const templateOpeningsMap = useMemo(() => {
+    const m: Record<string, { id: string; label: string; pieceTemplateId: string; templateName: string }[]> = {};
+    usedTemplateIds.forEach((tplId, i) => {
+      const q = templateQueries[i];
+      if (q?.data?.openings) {
+        m[tplId] = q.data.openings.map((o) => ({ id: o.id, label: o.label, pieceTemplateId: o.pieceTemplateId, templateName: o.templateName }));
+      }
+    });
+    return m;
+  }, [templateQueries, usedTemplateIds]);
+
+  // Group openings by pieceTemplateId
+  const allGroups = useMemo(() => {
+    const groupMap = new Map<string, { pieceTemplateId: string; pieceTemplateName: string; openings: { id: string; label: string }[] }>();
+    for (const [, openings] of Object.entries(templateOpeningsMap)) {
+      for (const o of openings) {
+        if (!groupMap.has(o.pieceTemplateId)) {
+          groupMap.set(o.pieceTemplateId, { pieceTemplateId: o.pieceTemplateId, pieceTemplateName: o.templateName, openings: [] });
+        }
+        groupMap.get(o.pieceTemplateId)!.openings.push({ id: o.id, label: o.label });
+      }
+    }
+    return Array.from(groupMap.values());
+  }, [templateOpeningsMap]);
+
+  // For each group, collect cells and group by W×H
+  const groupSizeData = useMemo(() => {
+    return allGroups.map((group) => {
+      const openingIds = new Set(group.openings.map((o) => o.id));
+      const cells: { floor: number; aptIndex: number; w: number; h: number; openingId: string }[] = [];
+      for (let f = 0; f < floors; f++) {
+        for (let i = 0; i < apartmentsPerFloor; i++) {
+          const aptTplId = assignmentMap[`${f}_${i}`];
+          if (!aptTplId) continue;
+          const openings = templateOpeningsMap[aptTplId] ?? [];
+          for (const o of openings) {
+            if (!openingIds.has(o.id)) continue;
+            const key = `${o.id}_${f}_${i}`;
+            const cell = sizes[key];
+            if (!cell || !cell.width || !cell.height) continue;
+            const w = parseFloat(cell.width);
+            const h = parseFloat(cell.height);
+            if (isNaN(w) || isNaN(h)) continue;
+            cells.push({ floor: f, aptIndex: i, w, h, openingId: o.id });
+          }
+        }
+      }
+
+      const sizeKeyMap = new Map<string, { w: number; h: number; count: number }>();
+      for (const cell of cells) {
+        const sizeKey = `${cell.w}_${cell.h}`;
+        if (!sizeKeyMap.has(sizeKey)) {
+          sizeKeyMap.set(sizeKey, { w: cell.w, h: cell.h, count: 0 });
+        }
+        sizeKeyMap.get(sizeKey)!.count++;
+      }
+
+      const sizeGroups = Array.from(sizeKeyMap.values()).map((g) => ({
+        avgW: String(g.w),
+        avgH: String(g.h),
+        count: g.count,
+      }));
+
+      return { group, sizeGroups };
+    });
+  }, [allGroups, sizes, floors, apartmentsPerFloor, assignmentMap, templateOpeningsMap]);
+
+  const [activeGroupId, setActiveGroupId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!activeGroupId && allGroups.length > 0) {
+      setActiveGroupId(allGroups[0].pieceTemplateId);
+    }
+  }, [allGroups, activeGroupId]);
+
+  const activeData = groupSizeData.find((d) => d.group.pieceTemplateId === activeGroupId);
+
+  // Fetch template detail for the active group
+  const { data: templateDetail } = useTemplate(activeGroupId);
+  const { data: profileSystemsList } = useProfileSystems();
+
+  const systemConstants = useMemo((): SystemConstant[] => {
+    if (!templateDetail?.profileSystemId || !profileSystemsList) return [];
+    const sys = profileSystemsList.find((s) => s.id === templateDetail.profileSystemId);
+    if (!sys?.constants) return [];
+    try {
+      return JSON.parse(sys.constants) as SystemConstant[];
+    } catch {
+      return [];
+    }
+  }, [templateDetail?.profileSystemId, profileSystemsList]);
+
+  // Resolve profile system key for the active template
+  const activeProfileSystemKey = useMemo(() => {
+    if (!templateDetail?.profileSystemId || !profileSystemsList) return null;
+    const sys = profileSystemsList.find((s) => s.id === templateDetail.profileSystemId);
+    return sys?.key ?? null;
+  }, [templateDetail?.profileSystemId, profileSystemsList]);
+
+  // Evaluate pieces for each size group and aggregate by profile type
+  const poolsByProfileType = useMemo(() => {
+    if (!templateDetail?.pieces || !activeData) return null;
+
+    const variables: TemplateVariable[] = [
+      ...systemConstants.map((c) => ({ name: c.name, defaultValue: c.defaultValue })),
+      ...(templateDetail.variables ?? []).map((v) => ({
+        name: v.name,
+        defaultValue: v.defaultValue,
+      })),
+    ];
+
+    // Aggregate demand pieces by profile type across all size groups
+    const byProfileType: Map<string, { label: string; length: number; quantity: number }[]> = new Map();
+
+    for (const sg of activeData.sizeGroups) {
+      const wMm = convertToMM(parseFloat(sg.avgW));
+      const hMm = convertToMM(parseFloat(sg.avgH));
+      const result = generatePieces(
+        templateDetail.pieces.map((p) => ({
+          id: p.id,
+          label: p.label,
+          profileType: p.profileType,
+          lengthFormula: p.lengthFormula,
+          quantity: p.quantity,
+        })),
+        variables,
+        wMm,
+        hMm,
+      );
+
+      for (const piece of result.pieces) {
+        const list = byProfileType.get(piece.profileType) ?? [];
+        // Multiply piece quantity by size group count
+        list.push({
+          label: piece.label,
+          length: piece.length,
+          quantity: piece.quantity * sg.count,
+        });
+        byProfileType.set(piece.profileType, list);
+      }
+    }
+
+    // Merge pieces with same label+length within a profile type
+    const merged: { profileType: string; pieces: { label: string; length: number; quantity: number }[] }[] = [];
+    for (const [profileType, pieces] of byProfileType) {
+      const mergedPieces: { label: string; length: number; quantity: number }[] = [];
+      for (const p of pieces) {
+        const existing = mergedPieces.find((mp) => mp.label === p.label && mp.length === p.length);
+        if (existing) {
+          existing.quantity += p.quantity;
+        } else {
+          mergedPieces.push({ ...p });
+        }
+      }
+      merged.push({ profileType, pieces: mergedPieces });
+    }
+
+    return merged;
+  }, [templateDetail, activeData, convertToMM, systemConstants]);
+
+  // Match stock entries to each profile type pool
+  const poolsWithStock = useMemo(() => {
+    if (!poolsByProfileType || !stockEntries) return null;
+    return poolsByProfileType.map((pool) => {
+      const matchingStock = stockEntries.filter((s) => {
+        if (s.profileType !== pool.profileType) return false;
+        if (activeProfileSystemKey && s.profileSystem && s.profileSystem !== activeProfileSystemKey) return false;
+        return true;
+      });
+      return { ...pool, stock: matchingStock };
+    });
+  }, [poolsByProfileType, stockEntries, activeProfileSystemKey]);
+
+  const [activeProfileType, setActiveProfileType] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (poolsWithStock && poolsWithStock.length > 0) {
+      if (!activeProfileType || !poolsWithStock.find((p) => p.profileType === activeProfileType)) {
+        setActiveProfileType(poolsWithStock[0].profileType);
+      }
+    }
+  }, [poolsWithStock, activeProfileType]);
+
+  const activePool = poolsWithStock?.find((p) => p.profileType === activeProfileType);
+
+  // Pre-flight check: compare total demand vs total stock + estimate bars needed
+  const stockCheck = useMemo(() => {
+    if (!activePool) return null;
+    const totalDemandLength = activePool.pieces.reduce((sum, p) => sum + p.length * p.quantity, 0);
+    const totalStockLength = activePool.stock.reduce(
+      (sum, s) => sum + (s.length ?? 0) * s.quantity,
+      0
+    );
+
+    // Estimate bars needed per stock type (demand + kerf per cut / stock length)
+    const totalCuts = activePool.pieces.reduce((sum, p) => sum + p.quantity, 0);
+    const demandWithKerf = totalDemandLength + totalCuts * kerfWidth;
+    const barsEstimate = activePool.stock
+      .filter((s) => s.length && s.length > 0)
+      .map((s) => {
+        const barsNeeded = Math.ceil(demandWithKerf / s.length!);
+        return {
+          id: s.id,
+          label: s.label ?? `${s.length}mm`,
+          length: s.length!,
+          isRemnant: s.isRemnant,
+          available: s.quantity,
+          needed: barsNeeded,
+          shortfall: Math.max(0, barsNeeded - s.quantity),
+        };
+      });
+
+    return {
+      totalDemandLength: Math.round(totalDemandLength),
+      totalStockLength: Math.round(totalStockLength),
+      sufficient: totalStockLength >= totalDemandLength,
+      barsEstimate,
+    };
+  }, [activePool, kerfWidth]);
+
+  const [isOptimizing, setIsOptimizing] = useState(false);
+  const [hasOptimized, setHasOptimized] = useState(false);
+
+  const handleOptimize = useCallback(() => {
+    if (!activePool) return;
+
+    // Map stock to optimizer format
+    const stockLengths = activePool.stock.map((s) => ({
+      id: s.id,
+      length: s.length ?? 0,
+      quantity: s.quantity,
+      isRemnant: s.isRemnant,
+      label: s.label ?? "",
+    }));
+
+    // Map demand pieces to optimizer format
+    const demandPieces = activePool.pieces.map((p, i) => ({
+      id: `piece-${i}`,
+      label: p.label,
+      length: p.length,
+      quantity: p.quantity,
+    }));
+
+    setIsOptimizing(true);
+    setHasOptimized(false);
+
+    // Reset AppContext state for this pool
+    dispatch({ type: ACTIONS.CLEAR_PLAN });
+
+    // Load stock and demand into AppContext
+    dispatch({ type: ACTIONS.SET_STOCK_LENGTHS, payload: stockLengths });
+    dispatch({ type: ACTIONS.SET_DEMAND_PIECES, payload: demandPieces });
+    dispatch({ type: ACTIONS.SET_KERF, payload: kerfWidth });
+    dispatch({ type: ACTIONS.SET_OPTIMIZATION_STRATEGY, payload: optimizationStrategy });
+
+    // Run optimization after state is set
+    setTimeout(() => {
+      dispatch({ type: ACTIONS.RUN_OPTIMIZE });
+      setIsOptimizing(false);
+      setHasOptimized(true);
+    }, 100);
+  }, [activePool, dispatch, kerfWidth, optimizationStrategy]);
+
+  // Reset optimized state when switching pools
+  useEffect(() => {
+    setHasOptimized(false);
+    dispatch({ type: ACTIONS.CLEAR_PLAN });
+  }, [activeProfileType, activeGroupId, dispatch]);
+
+  const isLoading = templateQueries.some((q) => q.isLoading);
+  const isLoadingTemplate = !!activeGroupId && !templateDetail;
+
+  if (isLoading || isLoadingTemplate) {
+    return <LoadingState label="Loading optimization data..." />;
+  }
+
+  if (allGroups.length === 0) {
+    return (
+      <div className="text-center text-sm text-muted-foreground py-8">
+        No openings found. Make sure floor assignments and opening sizes are set.
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex flex-col gap-3">
+      {/* Building navigation */}
+      <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1">
+          <Button variant="outline" size="icon" onClick={onPrev} disabled={!hasPrev}>
+            <HugeiconsIcon icon={ArrowLeft01Icon} />
+          </Button>
+          <Button variant="outline" size="icon" onClick={onNext} disabled={!hasNext}>
+            <HugeiconsIcon icon={ArrowRight01Icon} />
+          </Button>
+        </div>
+        <span className="text-sm font-medium">{building.name}</span>
+        <span className="text-xs text-muted-foreground">
+          {building.floors} floors × {building.apartmentsPerFloor} apts
+        </span>
+      </div>
+
+      {/* Piece template group tabs */}
+      <div className="flex items-center justify-between">
+        <div className="inline-flex items-center gap-0.5 rounded-md bg-muted p-0.5">
+          {allGroups.map((g) => (
+            <button
+              key={g.pieceTemplateId}
+              type="button"
+              className={`px-3 py-1 text-xs font-medium rounded-md transition-all ${
+                activeGroupId === g.pieceTemplateId
+                  ? "bg-background text-foreground shadow-sm"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+              onClick={() => setActiveGroupId(g.pieceTemplateId)}
+            >
+              {g.pieceTemplateName}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Profile type sub-tabs + Optimize button */}
+      {poolsWithStock && poolsWithStock.length > 0 && (
+        <div className="flex items-center justify-between gap-3">
+          <div className="inline-flex items-center gap-0.5 rounded-md bg-muted p-0.5">
+            {poolsWithStock.map((p) => (
+              <button
+                key={p.profileType}
+                type="button"
+                className={`px-3 py-1 text-xs font-medium rounded-md transition-all ${
+                  activeProfileType === p.profileType
+                    ? "bg-background text-foreground shadow-sm"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+                onClick={() => setActiveProfileType(p.profileType)}
+              >
+                {profileTypeLabel(p.profileType)}
+                {p.stock.length === 0 && (
+                  <span className="ml-1 text-amber-600 dark:text-amber-400">⚠</span>
+                )}
+                <span className="ml-1 text-[10px] text-muted-foreground">
+                  {p.pieces.reduce((s, pp) => s + pp.quantity, 0)} pcs
+                </span>
+              </button>
+            ))}
+          </div>
+          <Button
+            onClick={handleOptimize}
+            disabled={isOptimizing || !activePool || activePool.stock.length === 0}
+          >
+            <HugeiconsIcon
+              icon={SparklesIcon}
+              size={14}
+              className={`mr-1.5 ${isOptimizing ? "animate-spin" : ""}`}
+            />
+            {isOptimizing ? "Working..." : "Optimize"}
+          </Button>
+        </div>
+      )}
+
+      {/* Stock check warnings */}
+      {activePool && activePool.stock.length === 0 && (
+        <Card className="border-amber-500/40 bg-amber-500/5">
+          <CardContent className="px-4 py-2 flex items-start gap-3">
+            <HugeiconsIcon icon={AlertCircleIcon} size={16} className="text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+            <div className="flex flex-col gap-0.5">
+              <span className="text-sm text-amber-700 dark:text-amber-300">
+                No stock found for {profileTypeLabel(activePool.profileType)}
+                {activeProfileSystemKey ? ` (${activeProfileSystemKey})` : ""}.
+              </span>
+              <span className="text-xs text-muted-foreground">
+                Add stock entries with this profile type in the Stock tab.
+              </span>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {activePool && activePool.stock.length > 0 && stockCheck && !stockCheck.sufficient && (
+        <Card className="border-amber-500/40 bg-amber-500/5">
+          <CardContent className="px-4 py-2 flex items-start gap-3">
+            <HugeiconsIcon icon={AlertCircleIcon} size={16} className="text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+            <div className="flex flex-col gap-0.5">
+              <span className="text-sm text-amber-700 dark:text-amber-300">
+                Stock may be insufficient: {formatLength(stockCheck.totalStockLength)} available vs {formatLength(stockCheck.totalDemandLength)} needed.
+              </span>
+              <span className="text-xs text-muted-foreground">
+                {stockCheck.barsEstimate
+                  .filter((b) => b.shortfall > 0)
+                  .map((b) => `~${b.needed}+ bars of ${b.label} needed (${b.available} available)`)
+                  .join(" · ")} · zero waste assumed — actual may be higher.
+              </span>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Shortage warning from optimizer */}
+      {state.cuttingPlan?.unplaced && state.cuttingPlan.unplaced.count > 0 && (() => {
+        const unplacedLength = state.cuttingPlan.unplaced.totalLength;
+        const unplacedCount = state.cuttingPlan.unplaced.count;
+        const unplacedWithKerf = unplacedLength + unplacedCount * kerfWidth;
+        const largestStock = activePool?.stock
+          ?.filter((s) => s.length && s.length > 0)
+          .sort((a, b) => (b.length ?? 0) - (a.length ?? 0))[0];
+        const additionalBars = largestStock
+          ? Math.ceil(unplacedWithKerf / largestStock.length!)
+          : null;
+        return (
+          <Card className="border-amber-500/40 bg-amber-500/5">
+            <CardContent className="px-4 py-2 flex items-start gap-3">
+              <HugeiconsIcon icon={AlertCircleIcon} size={16} className="text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+              <div className="flex flex-col gap-0.5">
+                <span className="text-sm text-amber-700 dark:text-amber-300">
+                  {unplacedCount} pieces ({Math.round(unplacedLength)}mm) couldn't be placed — insufficient stock.
+                </span>
+                <span className="text-xs text-muted-foreground">
+                  {additionalBars !== null
+                    ? `~${additionalBars}+ additional bars of ${largestStock!.label ?? `${largestStock!.length}mm`} needed · zero waste assumed`
+                    : "Add more stock bars to fit all demand pieces."}
+                </span>
+              </div>
+            </CardContent>
+          </Card>
+        );
+      })()}
+
+      {/* Summary stats before optimization */}
+      {activePool && !hasOptimized && activePool.stock.length > 0 && stockCheck && (
+        <div className="flex items-center gap-3 text-xs text-muted-foreground">
+          <span><strong className="text-foreground">{activePool.pieces.reduce((s, p) => s + p.quantity, 0)}</strong> pieces</span>
+          <span>·</span>
+          <span><strong className="text-foreground">{activePool.stock.length}</strong> stock types</span>
+          <span>·</span>
+          <span>Kerf: <strong className="text-foreground">{kerfWidth}mm</strong></span>
+          <span>·</span>
+          <span>Goal: <strong className="text-foreground">{optimizationStrategy === "maximize_large_bars" ? "Maximize Large Bars" : "Balanced"}</strong></span>
+        </div>
+      )}
+
+      {/* Results */}
+      {hasOptimized && state.isOptimized && (
+        <ResultsPanel />
+      )}
+
+      {/* Empty state */}
+      {activePool && activePool.stock.length > 0 && !hasOptimized && (
+        <Card className="border-dashed">
+          <CardContent className="flex flex-col items-center justify-center py-16 text-center">
+            <HugeiconsIcon icon={ScissorIcon} size={32} className="text-muted-foreground mb-3" />
+            <p className="text-sm text-muted-foreground">
+              Click "Optimize" to run the cutting optimizer for {profileTypeLabel(activePool.profileType)} pieces.
+            </p>
+          </CardContent>
+        </Card>
+      )}
+    </div>
+  );
+}

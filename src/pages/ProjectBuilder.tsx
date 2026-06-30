@@ -82,6 +82,7 @@ import {
   Search01Icon,
   FilterIcon,
   AlertCircleIcon,
+  ScissorIcon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "../components/ui/tabs";
@@ -92,6 +93,7 @@ import { useTemplate, type TemplatePiece } from "../hooks/useTemplates";
 import { useProfileSystems, type SystemConstant } from "../hooks/useProfileSystems";
 import { generatePieces, type TemplateVariable } from "../engine/pieceGenerator";
 import { useProfileTypes } from "../hooks/useProfileTypes";
+import { OptimizationTab } from "./OptimizationTab";
 
 function useProfileTypeLabel() {
   const { data: profileTypes } = useProfileTypes();
@@ -109,6 +111,7 @@ interface SizeGrid {
 export default function ProjectBuilder() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const { kerfWidth: globalKerfWidth, optimizationStrategy: globalStrategy } = useSettings();
   const { data: project, isLoading } = useProject(id ?? null);
   const { data: stockEntries } = useProjectStock(id ?? null);
   const { data: allStockCatalog } = useStockCatalog();
@@ -153,8 +156,8 @@ export default function ProjectBuilder() {
       setName(project.name);
       setClient(project.client ?? "");
       setStatus(project.status);
-      setKerfWidth(project.kerfWidth ?? 5);
-      setOptimizationStrategy(project.optimizationStrategy ?? "maximize_large_bars");
+      setKerfWidth(project.kerfWidth ?? globalKerfWidth);
+      setOptimizationStrategy(project.optimizationStrategy ?? globalStrategy);
       setProfileSystem(project.profileSystem ?? ["manazil"]);
     }
   }, [project]);
@@ -364,6 +367,8 @@ export default function ProjectBuilder() {
                 onKerfWidthChange={setKerfWidth}
                 onOptimizationStrategyChange={setOptimizationStrategy}
                 onProfileSystemChange={setProfileSystem}
+                globalKerfWidth={globalKerfWidth}
+                globalStrategy={globalStrategy}
               />
             </TabsContent>
           </div>
@@ -917,6 +922,7 @@ function ProjectSettings({
   name, client, status, onNameChange, onClientChange, onSave, isSaving, onDelete, onArchive, isDeleting, isArchiving,
   kerfWidth, optimizationStrategy, profileSystem, lockedSystems,
   onKerfWidthChange, onOptimizationStrategyChange, onProfileSystemChange,
+  globalKerfWidth, globalStrategy,
 }: {
   name: string;
   client: string;
@@ -936,6 +942,8 @@ function ProjectSettings({
   onKerfWidthChange: (v: number) => void;
   onOptimizationStrategyChange: (v: Project["optimizationStrategy"]) => void;
   onProfileSystemChange: (v: string[]) => void;
+  globalKerfWidth: number;
+  globalStrategy: Project["optimizationStrategy"];
 }) {
   const { unitLabel } = useSettings();
   const navigate = useNavigate();
@@ -1051,25 +1059,46 @@ function ProjectSettings({
                   className="h-7  w-full"
                 />
                 <span className="text-xs text-muted-foreground shrink-0">mm</span>
+                {kerfWidth === globalKerfWidth && (
+                  <span className="text-[10px] text-muted-foreground shrink-0">Global default</span>
+                )}
+                {kerfWidth !== globalKerfWidth && (
+                  <button
+                    type="button"
+                    onClick={() => onKerfWidthChange(globalKerfWidth)}
+                    className="text-[10px] text-muted-foreground underline hover:text-foreground shrink-0"
+                  >Reset</button>
+                )}
               </div>
             </div>
             <Separator />
             <div className="grid grid-cols-[80px_1fr] items-center gap-3">
               <Label className="text-xs text-muted-foreground">Goal</Label>
-              <Select
-                value={optimizationStrategy}
-                onValueChange={(v) => onOptimizationStrategyChange(v as Project["optimizationStrategy"])}
-              >
-                <SelectTrigger className="h-7 text-xs w-full">
-                  <SelectValue>
-                    {optimizationStrategy === "maximize_large_bars" ? "Maximize Large Bars" : "Balanced"}
-                  </SelectValue>
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="maximize_large_bars">Maximize Large Bars</SelectItem>
-                  <SelectItem value="balanced">Balanced</SelectItem>
-                </SelectContent>
-              </Select>
+              <div className="flex items-center gap-2">
+                <Select
+                  value={optimizationStrategy}
+                  onValueChange={(v) => onOptimizationStrategyChange(v as Project["optimizationStrategy"])}
+                >
+                  <SelectTrigger className="h-7 text-xs w-full">
+                    <SelectValue>
+                      {optimizationStrategy === "maximize_large_bars" ? "Maximize Large Bars" : "Balanced"}
+                    </SelectValue>
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="maximize_large_bars">Maximize Large Bars</SelectItem>
+                    <SelectItem value="balanced">Balanced</SelectItem>
+                  </SelectContent>
+                </Select>
+                {optimizationStrategy === globalStrategy ? (
+                  <span className="text-[10px] text-muted-foreground shrink-0">Global</span>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => onOptimizationStrategyChange(globalStrategy)}
+                    className="text-[10px] text-muted-foreground underline hover:text-foreground shrink-0"
+                  >Reset</button>
+                )}
+              </div>
             </div>
           </CardContent>
         </Card>
@@ -1177,6 +1206,10 @@ export function BuildingDetail({
                 <HugeiconsIcon icon={PuzzleIcon} size={14} />
                 Piece Pools
               </TabsTrigger>
+              <TabsTrigger value="optimization">
+                <HugeiconsIcon icon={ScissorIcon} size={14} />
+                Optimization
+              </TabsTrigger>
             </TabsList>
             <TabsList>
               <TabsTrigger value="settings">
@@ -1214,6 +1247,19 @@ export function BuildingDetail({
         </TabsContent>
         <TabsContent value="pieces" className="mt-3">
           <PiecePools
+            projectId={projectId}
+            building={building}
+            existingAssignments={existingAssignments}
+            existingSizes={existingSizes}
+            aptTemplateNames={aptTemplateNames}
+            onPrev={onPrev}
+            onNext={onNext}
+            hasPrev={hasPrev}
+            hasNext={hasNext}
+          />
+        </TabsContent>
+        <TabsContent value="optimization" className="mt-3">
+          <OptimizationTab
             projectId={projectId}
             building={building}
             existingAssignments={existingAssignments}
@@ -2368,7 +2414,8 @@ function PiecePools({
   hasPrev?: boolean;
   hasNext?: boolean;
 }) {
-  const { fromMM: convertFromMM, toMM: convertToMM, unitLabel, formatLength } = useSettings();
+  const { fromMM: convertFromMM, toMM: convertToMM, unitLabel, formatLength,
+          kerfWidth: globalKerfWidth, optimizationStrategy: globalStrategy } = useSettings();
   const profileTypeLabel = useProfileTypeLabel();
   const floors = building.floors;
   const apartmentsPerFloor = building.apartmentsPerFloor;

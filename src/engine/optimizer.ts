@@ -277,6 +277,7 @@ function bestFitBar(bars, pieceLength, kerfWidth) {
  */
 function runBFD(pieces, sortedStock, kerfWidth, preLockBars) {
   const bars = preLockBars.map(cloneBar);
+  const unplaced = [];
 
   // Sort descending by length (the "Decreasing" in BFD)
   const sorted = [...pieces].sort((a, b) => b.length - a.length);
@@ -292,12 +293,12 @@ function runBFD(pieces, sortedStock, kerfWidth, preLockBars) {
         placePiece(newBar, piece, kerfWidth);
         bars.push(newBar);
       } else {
-        console.warn(`Could not place piece: ${piece.label} (${piece.length}mm)`);
+        unplaced.push(piece);
       }
     }
   }
 
-  return bars;
+  return { bars, unplaced };
 }
 
 
@@ -705,6 +706,7 @@ function sortPiecesInBars(bars, kerfWidth) {
 export function optimize({ stockLengths, demandPieces, kerfWidth = 0, optimizationStrategy = 'maximize_large_bars' }) {
   const strategies = ['asc', 'desc'];
   let bestBars = null;
+  let bestUnplaced = [];
 
   for (const strategy of strategies) {
     resetBarIdCounter(); // Reset IDs so they start at 1 for each simulation pass
@@ -714,15 +716,53 @@ export function optimize({ stockLengths, demandPieces, kerfWidth = 0, optimizati
     const sortedStock = sortStockByPriority(stockCopy, strategy);
     const allPieces = expandPieces(demandPieces);
 
+    // Record initial stock quantities before BFD consumes them
+    const initialStockQty = {};
+    for (const s of stockCopy) {
+      initialStockQty[s.id] = s.quantity;
+    }
+
     // ── Phase 1: BFD ──
-    const bfdBars = runBFD(allPieces, sortedStock, kerfWidth, []);
+    const bfdResult = runBFD(allPieces, sortedStock, kerfWidth, []);
+    const bfdBars = bfdResult.bars;
+    let unplacedPieces = bfdResult.unplaced;
 
     // ── Phase 2: Local Search ──
-    const optimizedBars = localSearch(bfdBars, stockCopy, kerfWidth, optimizationStrategy);
+    let optimizedBars = localSearch(bfdBars, stockCopy, kerfWidth, optimizationStrategy);
+
+    // ── Phase 2b: Recovery ──
+    // Local search may have eliminated bars (redistributing their pieces),
+    // freeing up stock that BFD had consumed. Restore that freed stock and
+    // try to place any unplaced pieces using it.
+    if (unplacedPieces.length > 0 && optimizedBars.length < bfdBars.length) {
+      // Count how many bars of each stock type are actually used in the result
+      const usedStockCounts = {};
+      for (const bar of optimizedBars) {
+        usedStockCounts[bar.stockLengthId] = (usedStockCounts[bar.stockLengthId] || 0) + 1;
+      }
+
+      // Restore freed stock: original quantity minus what's actually used
+      for (const stock of stockCopy) {
+        const used = usedStockCounts[stock.id] || 0;
+        stock.quantity = (initialStockQty[stock.id] ?? 0) - used;
+        if (stock.quantity < 0) stock.quantity = 0;
+      }
+
+      // Re-sort stock by priority for recovery placement
+      const recoveryStock = sortStockByPriority(stockCopy, strategy);
+
+      // Try to place unplaced pieces into existing bars + new bars from freed stock.
+      // runBFD clones pre-locked bars, so recoveryResult.bars contains all bars
+      // (clones of existing + any new ones opened from freed stock).
+      const recoveryResult = runBFD(unplacedPieces, recoveryStock, kerfWidth, optimizedBars);
+      optimizedBars = recoveryResult.bars;
+      unplacedPieces = recoveryResult.unplaced;
+    }
 
     // ── Compare with best known solution ──
     if (!bestBars || isBetter(optimizedBars, bestBars, optimizationStrategy)) {
       bestBars = optimizedBars;
+      bestUnplaced = unplacedPieces;
     }
   }
 
@@ -731,7 +771,15 @@ export function optimize({ stockLengths, demandPieces, kerfWidth = 0, optimizati
   bestBars.sort((a, b) => a.waste - b.waste);
   const summary = recalculateSummary(bestBars);
 
-  return { bars: bestBars, summary };
+  const unplacedSummary = bestUnplaced.length > 0
+    ? {
+        count: bestUnplaced.length,
+        totalLength: bestUnplaced.reduce((sum, p) => sum + p.length, 0),
+        pieces: bestUnplaced,
+      }
+    : null;
+
+  return { bars: bestBars, summary, unplaced: unplacedSummary };
 }
 
 
