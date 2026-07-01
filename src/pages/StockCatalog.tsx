@@ -36,6 +36,7 @@ import {
   FilterIcon,
   SaveIcon,
   AlertCircleIcon,
+  InformationCircleIcon,
 } from "@hugeicons/core-free-icons";
 import { useSettings } from "../hooks/useSettings";
 
@@ -213,51 +214,63 @@ export default function StockCatalog() {
                         />
                       </div>
                     </CardAction>
-                    <CardTitle className="text-sm truncate">
-                      {entry.label || "Unnamed"}
+                    <CardTitle className="text-sm truncate flex items-center gap-1.5">
+                      <span className="truncate">{entry.label || "Unnamed"}</span>
+                      <Badge
+                          variant="secondary"
+                          className={
+                            "text-[9px] px-1 py-0 h-4 capitalize shrink-0 " +
+                            (entry.profileSystem === "manazil"
+                              ? "bg-blue-500/15 text-blue-700 dark:text-blue-400"
+                              : "bg-orange-500/15 text-orange-700 dark:text-orange-400")
+                          }
+                        >
+                          {entry.profileSystem}
+                        </Badge>
                     </CardTitle>
                     <CardDescription className="text-xs truncate flex items-center gap-1.5">
-                      <Badge
-                        variant="secondary"
-                        className={
-                          "text-[9px] px-1 py-0 h-4 capitalize shrink-0 " +
-                          (entry.profileSystem === "manazil"
-                            ? "bg-blue-500/15 text-blue-700 dark:text-blue-400"
-                            : "bg-orange-500/15 text-orange-700 dark:text-orange-400")
-                        }
-                      >
-                        {entry.profileSystem}
-                      </Badge>
-                      <span className="truncate"> · {profileTypeLabel(entry.profileType)} · {formatLength(entry.length)}</span>
+                      <span className="truncate">{profileTypeLabel(entry.profileType)} · {formatLength(entry.length)}</span>
+                      {entry.quantity !== -1 && (
+                        <>
+                          <span className="text-muted-foreground">·</span>
+                          <span className="text-muted-foreground whitespace-nowrap">{entry.quantity} on-hand</span>
+                        </>
+                      )}
                     </CardDescription>
                   </CardHeader>
                   <CardFooter className="bg-muted/50 py-2.5">
-                    <div className="flex items-center justify-between w-full gap-2 text-[10px] text-muted-foreground">
+                    <div className="flex items-center justify-between w-full gap-2 text-[10px] text-muted-foreground whitespace-nowrap">
                       {entry.quantity === -1 ? (
                         <span>∞ unlimited</span>
                       ) : (
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-1.5 min-w-0 whitespace-nowrap">
                           {(() => {
                             const available = entry.quantity - entry.reservedQty;
-                            const colorClass =
+                            const availColor =
                               available <= 0
                                 ? "text-red-600 dark:text-red-400"
                                 : available <= Math.max(5, entry.quantity * 0.15)
                                   ? "text-amber-600 dark:text-amber-400"
                                   : "text-emerald-600 dark:text-emerald-400";
                             return (
-                              <>
-                                <span className={colorClass + " font-medium text-xs"}>
-                                  {available} free
-                                </span>
-                                {(entry.reservedQty > 0 || entry.usedQty > 0) && (
-                                  <span className="text-muted-foreground">
-                                    ({entry.quantity} on-hand{entry.reservedQty > 0 ? ` · ${entry.reservedQty} res` : ""}{entry.usedQty > 0 ? ` · ${entry.usedQty} used` : ""})
-                                  </span>
-                                )}
-                              </>
+                              <span className={availColor + "text-xs"}>
+                                {available} free
+                              </span>
                             );
                           })()}
+                          {entry.reservedQty > 0 && (
+                            <>
+                              <span className="text-muted-foreground">·</span>
+                              <span className="text-amber-600 dark:text-amber-400">{entry.reservedQty} reserved</span>
+                            </>
+                          )}
+                          {entry.usedQty > 0 && (
+                            <>
+                              <span className="text-muted-foreground">·</span>
+                              <span className="text-red-600 dark:text-red-400">{entry.usedQty} used</span>
+                              <span title="Bars consumed by applied cutting plans" className="cursor-help"><HugeiconsIcon icon={InformationCircleIcon} size={11} className="text-muted-foreground" /></span>
+                            </>
+                          )}
                         </div>
                       )}
                       <div className="flex items-center gap-2">
