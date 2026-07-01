@@ -6,7 +6,7 @@ import { validateMove } from '../../engine/optimizer';
 import {
   CircleGaugeIcon, ScissorIcon, PackageIcon, WasteIcon, DollarSignIcon,
   PrinterIcon, FileDownloadIcon, DragDropVerticalIcon, Recycle01Icon, Add01Icon, Delete02Icon, ListSettingIcon,
-  CheckmarkCircle01Icon, ArrowRight01Icon, Maximize02Icon, Minimize02Icon, Cancel01Icon,
+  Pdf01Icon, ArrowRight01Icon, Maximize02Icon, Minimize02Icon, Cancel01Icon,
 } from '@hugeicons/core-free-icons';
 import { HugeiconsIcon } from '@hugeicons/react';
 import { DndContext, DragOverlay, useDraggable, useDroppable, pointerWithin } from '@dnd-kit/core';
@@ -329,6 +329,40 @@ export default function ResultsPanel({ applyProps }: { applyProps?: ResultsPanel
     return null;
   };
 
+  const renderViewOptions = () => (
+    <DropdownMenu>
+      <DropdownMenuTrigger className={buttonVariants({ variant: "ghost", size: "sm" })}>
+        <HugeiconsIcon icon={ListSettingIcon} size={13} />
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="w-48">
+        <DropdownMenuGroup>
+          <DropdownMenuLabel className="text-xs" inset={false}>Layout preferences</DropdownMenuLabel>
+          <DropdownMenuSeparator className="" />
+          <div
+            className={`flex items-center gap-2 px-2 py-1.5 ${applyProps?.isApplied ? 'opacity-50 pointer-events-none' : 'cursor-pointer'}`}
+            onClick={(e) => {
+              e.stopPropagation();
+              if (!applyProps?.isApplied) setIsGroupedView(!isGroupedView);
+            }}
+          >
+            <Checkbox checked={!isGroupedView} disabled={!!applyProps?.isApplied} className="pointer-events-none" />
+            <span className="text-xs font-normal select-none">Allow editing (drag & drop)</span>
+          </div>
+          <div
+            className={`flex items-center gap-2 px-2 py-1.5 cursor-pointer ${!isGroupedView ? 'opacity-50 pointer-events-none' : ''}`}
+            onClick={(e) => {
+              e.stopPropagation();
+              if (isGroupedView) setSortByCount(!sortByCount);
+            }}
+          >
+            <Checkbox checked={sortByCount} disabled={!isGroupedView} className="pointer-events-none" />
+            <span className="text-xs font-normal select-none">Sort by group count</span>
+          </div>
+        </DropdownMenuGroup>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+
   const handleDragStart = (event: any) => {
     const { active } = event;
     const { piece, bar } = active.data.current;
@@ -398,6 +432,10 @@ export default function ResultsPanel({ applyProps }: { applyProps?: ResultsPanel
             icon={<HugeiconsIcon icon={PackageIcon} size={13} className="text-blue-500 dark:text-blue-400" />}
             label="Total Bars"
             value={summary.totalBars}
+            sub={Object.entries(summary.barsBreakdown).map(([stockId, count]: any) => {
+              const stock = getStockById(stockId);
+              return `${stock?.label || stockId}×${count}`;
+            }).join(' · ')}
           />
           <StatItem
             icon={<HugeiconsIcon icon={WasteIcon} size={13} className="text-orange-500 dark:text-orange-400" />}
@@ -424,61 +462,7 @@ export default function ResultsPanel({ applyProps }: { applyProps?: ResultsPanel
           />
         </div>
 
-        {/* Stock Breakdown & View Toggles */}
-        <div className="flex items-center justify-between">
-          <div className="flex flex-wrap items-center gap-2">
-            {Object.keys(summary.barsBreakdown).length > 0 && (
-              <>
-                <span className="text-[11px] font-medium text-muted-foreground">Stock</span>
-                {Object.entries(summary.barsBreakdown).map(([stockId, count]: any) => {
-                  const stock = getStockById(stockId);
-                  return (
-                    <Badge key={stockId} variant="secondary" className="font-normal">
-                      {stock?.label || stockId} <span className="ml-1 tabular-nums text-muted-foreground">×{count}</span>
-                    </Badge>
-                  );
-                })}
-              </>
-            )}
-          </div>
-
-          <div className="flex items-center gap-1 no-print px-1 py-1">
-            <DropdownMenu>
-              <DropdownMenuTrigger className={buttonVariants({ variant: "outline", size: "sm", className: "h-7 text-xs px-2 gap-1.5 text-muted-foreground" })}>
-                <HugeiconsIcon icon={ListSettingIcon} size={13} />
-                View Options
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-48">
-                <DropdownMenuGroup>
-                  <DropdownMenuLabel className="text-xs" inset={false}>Layout preferences</DropdownMenuLabel>
-                  <DropdownMenuSeparator className="" />
-                  <div
-                    className={`flex items-center gap-2 px-2 py-1.5 ${applyProps?.isApplied ? 'opacity-50 pointer-events-none' : 'cursor-pointer'}`}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      if (!applyProps?.isApplied) setIsGroupedView(!isGroupedView);
-                    }}
-                  >
-                    <Checkbox checked={!isGroupedView} disabled={!!applyProps?.isApplied} className="pointer-events-none" />
-                    <span className="text-xs font-normal select-none">Allow editing (drag & drop)</span>
-                  </div>
-                  <div
-                    className={`flex items-center gap-2 px-2 py-1.5 cursor-pointer ${!isGroupedView ? 'opacity-50 pointer-events-none' : ''}`}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      if (isGroupedView) setSortByCount(!sortByCount);
-                    }}
-                  >
-                    <Checkbox checked={sortByCount} disabled={!isGroupedView} className="pointer-events-none" />
-                    <span className="text-xs font-normal select-none">Sort by group count</span>
-                  </div>
-                </DropdownMenuGroup>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </div>
-        </div>
-
-        {/* Cutting Diagram */}
+      {/* Cutting Diagram */}
         <Card id="cutting-plan-printable">
           <CardHeader className="flex flex-row items-center justify-between space-y-0">
             <CardTitle className="flex items-center gap-1.5">
@@ -510,19 +494,28 @@ export default function ResultsPanel({ applyProps }: { applyProps?: ResultsPanel
                   </Button>
                 )
               )}
-              <Button variant="ghost" size="sm" onClick={handlePrint} title="Print">
-                <HugeiconsIcon icon={PrinterIcon} size={13} /> Print
-              </Button>
-              <Button variant="ghost" size="sm" onClick={handlePDF} title="Export PDF">
-                <HugeiconsIcon icon={FileDownloadIcon} size={13} /> PDF
-              </Button>
+              <DropdownMenu>
+                <DropdownMenuTrigger className={buttonVariants({ variant: "ghost", size: "sm" })}>
+                  <HugeiconsIcon icon={FileDownloadIcon} size={13} /> Export
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem onClick={handlePrint}>
+                    <HugeiconsIcon icon={PrinterIcon} size={13} className="mr-2" /> Print
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={handlePDF}>
+                    <HugeiconsIcon icon={Pdf01Icon} size={13} className="mr-2" /> PDF
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+              
+              {renderViewOptions()}
               <Button variant="ghost" size="sm" onClick={() => setIsFullscreen(true)} title="Fullscreen">
                 <HugeiconsIcon icon={Maximize02Icon} size={13} />
               </Button>
             </div>
           </CardHeader>
           <Separator />
-          <CardContent className="space-y-2 max-h-[35vh] overflow-y-auto">
+          <CardContent className="space-y-2 max-h-[40vh] overflow-y-auto">
             {renderBars()}
             {renderAddEmptyBar()}
           </CardContent>
@@ -542,12 +535,20 @@ export default function ResultsPanel({ applyProps }: { applyProps?: ResultsPanel
               )}
             </div>
             <div className="flex items-center gap-1">
-              <Button variant="ghost" size="sm" onClick={handlePrint} title="Print">
-                <HugeiconsIcon icon={PrinterIcon} size={13} /> Print
-              </Button>
-              <Button variant="ghost" size="sm" onClick={handlePDF} title="Export PDF">
-                <HugeiconsIcon icon={FileDownloadIcon} size={13} /> PDF
-              </Button>
+              <DropdownMenu>
+                <DropdownMenuTrigger className={buttonVariants({ variant: "ghost", size: "sm" })}>
+                  <HugeiconsIcon icon={FileDownloadIcon} size={13} /> Export
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem onClick={handlePrint}>
+                    <HugeiconsIcon icon={PrinterIcon} size={13} className="mr-2" /> Print
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={handlePDF}>
+                    <HugeiconsIcon icon={Pdf01Icon} size={13} className="mr-2" /> PDF
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+              {renderViewOptions()}
               <Button variant="ghost" size="sm" onClick={() => setIsFullscreen(false)} title="Exit Fullscreen">
                 <HugeiconsIcon icon={Cancel01Icon} size={13} />
               </Button>
