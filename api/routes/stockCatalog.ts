@@ -97,6 +97,29 @@ stockCatalogRoutes.put("/:id", async (c) => {
     .set(updates)
     .where(eq(stockCatalog.id, id));
 
+  // Propagate field changes to linked project stock entries
+  const linkedStock = await db
+    .select()
+    .from(stock)
+    .where(eq(stock.sourceDefaultId, id));
+
+  if (linkedStock.length > 0) {
+    const stockUpdates: Record<string, unknown> = {};
+    if (body.length !== undefined) stockUpdates.length = body.length;
+    if (body.profileType !== undefined) stockUpdates.profileType = body.profileType;
+    if (body.color !== undefined) stockUpdates.color = body.color;
+    if (body.label !== undefined) stockUpdates.label = body.label;
+
+    if (Object.keys(stockUpdates).length > 0) {
+      for (const entry of linkedStock) {
+        await db
+          .update(stock)
+          .set(stockUpdates)
+          .where(eq(stock.id, entry.id));
+      }
+    }
+  }
+
   return c.json({ id, updated: true });
 });
 
@@ -105,6 +128,16 @@ stockCatalogRoutes.put("/:id", async (c) => {
 stockCatalogRoutes.get("/:id/usage", async (c) => {
   const db = getDb(c.env);
   const id = c.req.param("id");
+
+  const existing = await db
+    .select()
+    .from(stockCatalog)
+    .where(eq(stockCatalog.id, id))
+    .limit(1);
+
+  if (existing.length === 0) {
+    return c.json({ error: "Stock catalog entry not found" }, 404);
+  }
 
   const refs = await db
     .select({
@@ -131,6 +164,14 @@ stockCatalogRoutes.get("/:id/usage", async (c) => {
     name: info.name,
     detail: `${info.count} stock entr${info.count === 1 ? "y" : "ies"}`,
   }));
+
+  if (existing[0].usedQty > 0) {
+    references.push({
+      type: "consumed" as const,
+      id: "consumed",
+      name: `${existing[0].usedQty} bars have been consumed by applied cutting plans`,
+    });
+  }
 
   return c.json({ canDelete: references.length === 0, references });
 });

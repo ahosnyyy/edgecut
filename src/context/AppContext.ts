@@ -141,6 +141,7 @@ export const ACTIONS = {
 
   // Optimization
   RUN_OPTIMIZE: 'RUN_OPTIMIZE',
+  LOAD_PLAN: 'LOAD_PLAN',
   CLEAR_PLAN: 'CLEAR_PLAN',
   SET_VALIDATION_ERRORS: 'SET_VALIDATION_ERRORS',
   SET_OPTIMIZE_ANIMATION: 'SET_OPTIMIZE_ANIMATION',
@@ -454,6 +455,15 @@ function _appReducer(state: AppState, action: any): AppState {
         overrides: {},
       };
 
+    case ACTIONS.LOAD_PLAN:
+      return {
+        ...state,
+        cuttingPlan: action.payload,
+        isOptimized: true,
+        validationErrors: [],
+        overrides: {},
+      };
+
     case ACTIONS.SET_VALIDATION_ERRORS:
       return {
         ...state,
@@ -584,8 +594,7 @@ function _appReducer(state: AppState, action: any): AppState {
       if (!stock) return state;
 
       const newBar = {
-        // Need to import genId if it wasn't exported, wait, genId is inside this file!
-        id: genId('bar'),
+        id: crypto.randomUUID(),
         stockLengthId: stock.id,
         stockLength: stock.length,
         isRemnant: stock.isRemnant || false,

@@ -156,7 +156,7 @@ dashboardRoutes.get("/stock-coverage", async (c) => {
     if (e.quantity === -1) {
       cur.unlimited = true;
     } else {
-      const available = e.quantity - e.reservedQty - e.usedQty;
+      const available = e.quantity - e.reservedQty;
       if (available > 0) cur.length += available * e.length;
     }
     // Use the first non-zero bar length found for this type

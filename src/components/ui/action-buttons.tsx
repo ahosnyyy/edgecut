@@ -83,6 +83,8 @@ const referenceTypeLabels: Record<string, string> = {
   project: "Project",
   stock_catalog: "Stock Catalog",
   project_stock: "Project Stock",
+  consumed: "Consumed",
+  applied_plan: "Applied Plan",
 };
 
 interface DeleteGuardDialogProps {
@@ -159,12 +161,12 @@ function DeleteGuardDialog({
                 <AlertDialogDescription>
                   This item is still in use. Remove all references before deleting:
                 </AlertDialogDescription>
-                <div className="rounded-lg border bg-muted/30 p-2">
+                <div className="rounded-lg border bg-muted/30 p-2 overflow-hidden">
                   <ul className="space-y-2">
                     {usage.references.map((ref, i) => (
-                      <li key={i} className="flex items-center justify-between gap-2 text-xs">
+                      <li key={i} className="flex flex-col gap-0.5 text-xs">
                         <span className="font-medium">{referenceTypeLabels[ref.type] ?? ref.type}</span>
-                        <span className="text-muted-foreground truncate">{ref.name}{ref.detail ? ` — ${ref.detail}` : ""}</span>
+                        <span className="text-muted-foreground break-words">{ref.name}{ref.detail ? ` — ${ref.detail}` : ""}</span>
                       </li>
                     ))}
                   </ul>

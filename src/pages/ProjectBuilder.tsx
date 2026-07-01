@@ -26,7 +26,7 @@ import { Label } from "../components/ui/label";
 import { Badge } from "../components/ui/badge";
 import { LoadingState } from "../components/ui/loading-states";
 import { Spinner } from "../components/ui/spinner";
-import { SaveButton, ConfirmDialog } from "../components/ui/action-buttons";
+import { SaveButton, ConfirmDialog, DeleteGuardDialog } from "../components/ui/action-buttons";
 import {
   Combobox,
   ComboboxChips,
@@ -423,7 +423,7 @@ function StockManagement({ projectId, profileSystems, search, setSearch, filterT
     if (!defaultId) return -1;
     const def = stockCatalog?.find((d) => d.id === defaultId);
     if (!def || def.quantity === -1) return -1;
-    return def.quantity - def.reservedQty - def.usedQty;
+    return def.quantity - def.reservedQty;
   };
 
   const [qtyError, setQtyError] = useState<string | null>(null);
@@ -432,7 +432,7 @@ function StockManagement({ projectId, profileSystems, search, setSearch, filterT
     const def = stockCatalog?.find((d) => d.id === defaultId);
     if (!def) return;
     setSelectedDefaultId(defaultId);
-    const available = def.quantity === -1 ? -1 : def.quantity - def.reservedQty - def.usedQty;
+    const available = def.quantity === -1 ? -1 : def.quantity - def.reservedQty;
     setNewQty(available <= 0 ? 0 : available);
     setNewLength(def.length);
     setNewLabel("");
@@ -639,7 +639,7 @@ function StockManagement({ projectId, profileSystems, search, setSearch, filterT
             >
               <CardHeader className="pb-1">
                 <CardAction>
-                  <ConfirmDialog
+                  <DeleteGuardDialog
                     trigger={
                       <Button
                         variant="ghost"
@@ -649,6 +649,7 @@ function StockManagement({ projectId, profileSystems, search, setSearch, filterT
                         <HugeiconsIcon icon={Delete02Icon} size={13} />
                       </Button>
                     }
+                    usageCheckUrl={`/api/projects/${projectId}/stock/${entry.id}/usage`}
                     title="Delete stock entry?"
                     description="This will permanently remove the stock entry from this project."
                     confirmLabel="Delete"
@@ -818,7 +819,7 @@ function StockManagement({ projectId, profileSystems, search, setSearch, filterT
                     </SelectTrigger>
                     <SelectContent>
                       {defaultsForView.map((d) => {
-                        const avail = d.quantity === -1 ? -1 : d.quantity - d.reservedQty - d.usedQty;
+                        const avail = d.quantity === -1 ? -1 : d.quantity - d.reservedQty;
                         return (
                           <SelectItem key={d.id} value={d.id}>
                             <span className="flex items-center gap-2">
@@ -1199,7 +1200,7 @@ export function BuildingDetail({
 
   return (
     <div className="flex flex-col gap-3">
-      <Tabs value={subTab} onValueChange={setSubTab}>
+      <Tabs key={subTab} value={subTab} onValueChange={setSubTab}>
         <div className="flex items-center justify-between gap-3">
           <div className="flex items-center gap-2">
             <TabsList>

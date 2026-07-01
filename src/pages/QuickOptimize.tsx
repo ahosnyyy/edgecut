@@ -10,14 +10,12 @@ import {
   PackageIcon,
   Settings01Icon,
   CheckListIcon,
-  SaveIcon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { Button } from "../components/ui/button";
 import { Badge } from "../components/ui/badge";
 import { Card, CardContent } from "../components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../components/ui/tabs";
-import { useHeaderAction } from "../components/layout/header-actions";
 
 export default function QuickOptimize() {
   const { state, dispatch } = useApp();
@@ -66,13 +64,6 @@ export default function QuickOptimize() {
     0,
   );
   const hasInput = state.stockLengths.length > 0 && state.demandPieces.length > 0;
-
-  useHeaderAction("cutting-optimizer-save", (
-    <Button variant="outline" className="gap-1.5" disabled title="Coming in Phase 8">
-      <HugeiconsIcon icon={SaveIcon} size={14} />
-      Save as Project
-    </Button>
-  ));
 
   return (
     <div className="flex flex-col h-full overflow-hidden">

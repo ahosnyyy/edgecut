@@ -13,10 +13,12 @@ import {
   stock,
   stockCatalog,
   profileSystems,
+  cuttingPlans,
 } from "../db/schema.js";
 import type { Env } from "../index.js";
 import { evalFormula } from "../lib/formula.js";
 import { nameToSlug, generateUniqueSlug } from "../lib/slug.js";
+import { reverseStockMovements } from "./cuttingPlans.js";
 
 export const projectRoutes = new Hono<{ Bindings: Env }>();
 
@@ -256,6 +258,20 @@ projectRoutes.delete("/:id", async (c) => {
     return c.json({ error: "Project not found" }, 404);
   }
   const id = proj.id;
+
+  // Un-apply all applied cutting plans (reverse stock movements)
+  const appliedPlans = await db
+    .select()
+    .from(cuttingPlans)
+    .where(and(eq(cuttingPlans.projectId, id), eq(cuttingPlans.isApplied, true)));
+
+  for (const plan of appliedPlans) {
+    await reverseStockMovements(db, plan);
+    await db
+      .update(cuttingPlans)
+      .set({ isApplied: false })
+      .where(eq(cuttingPlans.id, plan.id));
+  }
 
   // Release reservedQty on linked stock defaults for all project stock entries
   const projectStock = await db
@@ -805,6 +821,50 @@ projectRoutes.put("/:id/stock/:stockId", async (c) => {
   return c.json({ id: stockId, updated: true });
 });
 
+// ─── GET /api/projects/:id/stock/:stockId/usage — Check references before delete
+
+projectRoutes.get("/:id/stock/:stockId/usage", async (c) => {
+  const db = getDb(c.env);
+  const stockId = c.req.param("stockId");
+
+  const existing = await db
+    .select()
+    .from(stock)
+    .where(eq(stock.id, stockId))
+    .limit(1);
+
+  if (existing.length === 0) {
+    return c.json({ error: "Stock entry not found" }, 404);
+  }
+
+  const references: { type: string; id: string; name: string; detail?: string }[] = [];
+
+  // Check if any applied cutting plan references this stock entry
+  const appliedPlans = await db
+    .select()
+    .from(cuttingPlans)
+    .where(
+      and(
+        eq(cuttingPlans.projectId, existing[0].projectId),
+        eq(cuttingPlans.isApplied, true),
+      ),
+    );
+
+  for (const plan of appliedPlans) {
+    const bars = JSON.parse(plan.bars) as { stockLengthId?: string }[];
+    if (bars.some((b) => b.stockLengthId === stockId)) {
+      references.push({
+        type: "applied_plan",
+        id: plan.id,
+        name: `Applied cutting plan (${plan.profileType})`,
+        detail: "Un-apply the plan before deleting this stock entry",
+      });
+    }
+  }
+
+  return c.json({ canDelete: references.length === 0, references });
+});
+
 // ─── DELETE /api/projects/:id/stock/:stockId — Delete stock entry ─────────────
 
 projectRoutes.delete("/:id/stock/:stockId", async (c) => {
@@ -817,6 +877,30 @@ projectRoutes.delete("/:id/stock/:stockId", async (c) => {
     .from(stock)
     .where(eq(stock.id, stockId))
     .limit(1);
+
+  if (existing.length === 0) {
+    return c.json({ error: "Stock entry not found" }, 404);
+  }
+
+  // Check if any applied cutting plan references this stock entry
+  const appliedPlans = await db
+    .select()
+    .from(cuttingPlans)
+    .where(
+      and(
+        eq(cuttingPlans.projectId, existing[0].projectId),
+        eq(cuttingPlans.isApplied, true),
+      ),
+    );
+
+  for (const plan of appliedPlans) {
+    const bars = JSON.parse(plan.bars) as { stockLengthId?: string }[];
+    if (bars.some((b) => b.stockLengthId === stockId)) {
+      return c.json({
+        error: "Cannot delete: this stock entry is referenced by an applied cutting plan. Un-apply the plan first.",
+      }, 400);
+    }
+  }
 
   await db.delete(stock).where(eq(stock.id, stockId));
 

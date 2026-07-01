@@ -238,7 +238,7 @@ export default function StockCatalog() {
                       ) : (
                         <div className="flex items-center gap-2">
                           {(() => {
-                            const available = entry.quantity - entry.reservedQty - entry.usedQty;
+                            const available = entry.quantity - entry.reservedQty;
                             const colorClass =
                               available <= 0
                                 ? "text-red-600 dark:text-red-400"
@@ -248,11 +248,11 @@ export default function StockCatalog() {
                             return (
                               <>
                                 <span className={colorClass + " font-medium text-xs"}>
-                                  {available} available
+                                  {available} free
                                 </span>
                                 {(entry.reservedQty > 0 || entry.usedQty > 0) && (
                                   <span className="text-muted-foreground">
-                                    ({entry.reservedQty} res · {entry.usedQty} used)
+                                    ({entry.quantity} on-hand{entry.reservedQty > 0 ? ` · ${entry.reservedQty} res` : ""}{entry.usedQty > 0 ? ` · ${entry.usedQty} used` : ""})
                                   </span>
                                 )}
                               </>

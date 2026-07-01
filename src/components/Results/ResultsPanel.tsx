@@ -5,7 +5,8 @@ import { formatLength } from '../../engine/units';
 import { validateMove } from '../../engine/optimizer';
 import {
   CircleGaugeIcon, ScissorIcon, PackageIcon, WasteIcon, DollarSignIcon,
-  PrinterIcon, FileDownloadIcon, DragDropVerticalIcon, Recycle01Icon, Add01Icon, Delete02Icon, ListSettingIcon
+  PrinterIcon, FileDownloadIcon, DragDropVerticalIcon, Recycle01Icon, Add01Icon, Delete02Icon, ListSettingIcon,
+  CheckmarkCircle01Icon, ArrowRight01Icon,
 } from '@hugeicons/core-free-icons';
 import { HugeiconsIcon } from '@hugeicons/react';
 import { DndContext, DragOverlay, useDraggable, useDroppable, pointerWithin } from '@dnd-kit/core';
@@ -41,7 +42,19 @@ function groupBars(bars: any[]) {
   return grouped;
 }
 
-export default function ResultsPanel() {
+export interface ResultsPanelApplyProps {
+  isApplied: boolean;
+  isSaved: boolean;
+  isSaving?: boolean;
+  isApplying: boolean;
+  isUnapplying: boolean;
+  onApply: () => void;
+  onUnapply: () => void;
+  onClear?: () => void;
+  isClearing?: boolean;
+}
+
+export default function ResultsPanel({ applyProps }: { applyProps?: ResultsPanelApplyProps } = {}) {
   const { state, dispatch, getColorForLength, getRGBForLength, getStockById } = useApp();
   const { cuttingPlan, isOptimized, settings, stockLengths } = state;
   const { unit, pricePerBar, kerfWidth } = settings;
@@ -380,14 +393,14 @@ export default function ResultsPanel() {
                   <DropdownMenuLabel className="text-xs" inset={false}>Layout preferences</DropdownMenuLabel>
                   <DropdownMenuSeparator className="" />
                   <div
-                    className="flex items-center gap-2 px-2 py-1.5 cursor-pointer"
+                    className={`flex items-center gap-2 px-2 py-1.5 ${applyProps?.isApplied ? 'opacity-50 pointer-events-none' : 'cursor-pointer'}`}
                     onClick={(e) => {
                       e.stopPropagation();
-                      setIsGroupedView(!isGroupedView);
+                      if (!applyProps?.isApplied) setIsGroupedView(!isGroupedView);
                     }}
                   >
-                    <Checkbox checked={isGroupedView} className="pointer-events-none" />
-                    <span className="text-xs font-normal select-none">Group identical bars</span>
+                    <Checkbox checked={!isGroupedView} disabled={!!applyProps?.isApplied} className="pointer-events-none" />
+                    <span className="text-xs font-normal select-none">Allow editing (drag & drop)</span>
                   </div>
                   <div
                     className={`flex items-center gap-2 px-2 py-1.5 cursor-pointer ${!isGroupedView ? 'opacity-50 pointer-events-none' : ''}`}
@@ -412,9 +425,31 @@ export default function ResultsPanel() {
               <HugeiconsIcon icon={ScissorIcon} size={14} /> Cutting Plan
             </CardTitle>
             <div className="flex items-center gap-1 no-print">
-              <Button variant="ghost" size="sm" className="text-destructive hover:bg-destructive/10 hover:text-destructive" onClick={handleClear} title="Clear Plan">
-                <HugeiconsIcon icon={Delete02Icon} size={13} /> Clear
-              </Button>
+              {applyProps && applyProps.isSaving && (
+                <span className="text-xs text-muted-foreground animate-pulse">Saving...</span>
+              )}
+              {applyProps && !applyProps.isSaving && (
+                applyProps.isApplied ? (
+                  <Button
+                    variant="destructive"
+                    size="sm"
+                    onClick={applyProps.onUnapply}
+                    disabled={applyProps.isUnapplying}
+                    className="w-[85px]"
+                  >
+                    {applyProps.isUnapplying ? 'Restoring...' : 'Un-apply'}
+                  </Button>
+                ) : (
+                  <Button
+                    size="sm"
+                    onClick={applyProps.onApply}
+                    disabled={applyProps.isApplying}
+                    className="w-[85px]"
+                  >
+                    {applyProps.isApplying ? 'Applying...' : 'Apply'}
+                  </Button>
+                )
+              )}
               <Button variant="ghost" size="sm" onClick={handlePrint} title="Print">
                 <HugeiconsIcon icon={PrinterIcon} size={13} /> Print
               </Button>
@@ -424,7 +459,7 @@ export default function ResultsPanel() {
             </div>
           </CardHeader>
           <Separator />
-          <CardContent className="space-y-2">
+          <CardContent className="space-y-2 max-h-[35vh] overflow-y-auto">
             {(() => {
               const displayBars = isGroupedView ? groupBars(bars) : bars.map((b: any) => ({ ...b, count: 1 }));
               if (isGroupedView && sortByCount) {
@@ -440,7 +475,7 @@ export default function ResultsPanel() {
                     bar={bar}
                     index={displayIndex}
                     count={bar.count}
-                    disableDnd={isGroupedView}
+                    disableDnd={isGroupedView || !!applyProps?.isApplied}
                     unit={unit}
                     getColorForLength={getColorForLength}
                     dispatch={dispatch}
@@ -450,32 +485,34 @@ export default function ResultsPanel() {
               });
             })()}
 
-            <div className="no-print flex gap-2 items-center pt-2">
-              {stockLengths.length > 1 && (
-                <Select value={activeEmptyStock?.id || ''} onValueChange={(val: string | null) => setSelectedEmptyStockId(val || '')}>
-                  <SelectTrigger className="w-[180px]">
-                    <SelectValue placeholder="Select stock length...">
-                      {activeEmptyStock
-                        ? `${activeEmptyStock.label} (${formatLength(activeEmptyStock.length, unit)})`
-                        : null}
-                    </SelectValue>
-                  </SelectTrigger>
-                  <SelectContent>
-                    {stockLengths.map((s: any) => (
-                      <SelectItem key={s.id} value={s.id}>{s.label} ({formatLength(s.length, unit)})</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              )}
-              <Button
-                variant="outline"
-                className="flex-1 border-dashed text-muted-foreground hover:text-foreground"
-                onClick={handleAddEmptyBar}
-                title="Add an empty bar to use as a temporary workspace"
-              >
-                <HugeiconsIcon icon={Add01Icon} size={14} className="mr-1.5" /> Empty Bar
-              </Button>
-            </div>
+            {!isGroupedView && !applyProps?.isApplied && (
+              <div className="no-print flex gap-2 items-center pt-2">
+                {stockLengths.length > 1 && (
+                  <Select value={activeEmptyStock?.id || ''} onValueChange={(val: string | null) => setSelectedEmptyStockId(val || '')}>
+                    <SelectTrigger className="w-[180px]">
+                      <SelectValue placeholder="Select stock length...">
+                        {activeEmptyStock
+                          ? `${activeEmptyStock.label} (${formatLength(activeEmptyStock.length, unit)})`
+                          : null}
+                      </SelectValue>
+                    </SelectTrigger>
+                    <SelectContent>
+                      {stockLengths.map((s: any) => (
+                        <SelectItem key={s.id} value={s.id}>{s.label} ({formatLength(s.length, unit)})</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
+                <Button
+                  variant="outline"
+                  className="flex-1 border-dashed text-muted-foreground hover:text-foreground"
+                  onClick={handleAddEmptyBar}
+                  title="Add an empty bar to use as a temporary workspace"
+                >
+                  <HugeiconsIcon icon={Add01Icon} size={14} className="mr-1.5" /> Empty Bar
+                </Button>
+              </div>
+            )}
           </CardContent>
         </Card>
       </div>

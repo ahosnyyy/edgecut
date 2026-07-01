@@ -7,11 +7,27 @@ import { useProjectStock } from "../hooks/useProjects";
 import { useTemplate } from "../hooks/useTemplates";
 import { useProfileSystems, type SystemConstant } from "../hooks/useProfileSystems";
 import { useProfileTypes } from "../hooks/useProfileTypes";
+import {
+  useCuttingPlans,
+  useSaveCuttingPlan,
+  useUpdateCuttingPlan,
+  useApplyCuttingPlan,
+  useUnapplyCuttingPlan,
+  useDeleteCuttingPlan,
+} from "../hooks/useCuttingPlans";
 import { generatePieces, type TemplateVariable } from "../engine/pieceGenerator";
+import { optimize } from "../engine/optimizer";
 import ResultsPanel from "../components/Results/ResultsPanel";
 import { Button } from "../components/ui/button";
 import { Card, CardContent } from "../components/ui/card";
 import { LoadingState } from "../components/ui/loading-states";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "../components/ui/dialog";
 import { HugeiconsIcon } from "@hugeicons/react";
 import {
   SparklesIcon,
@@ -19,6 +35,8 @@ import {
   ArrowRight01Icon,
   AlertCircleIcon,
   ScissorIcon,
+  CheckmarkCircle01Icon,
+  Delete02Icon,
 } from "@hugeicons/core-free-icons";
 import type { BuildingLike } from "./ProjectBuilder";
 
@@ -326,6 +344,36 @@ export function OptimizationTab({
   const [isOptimizing, setIsOptimizing] = useState(false);
   const [hasOptimized, setHasOptimized] = useState(false);
 
+  // ── Cutting plan persistence (save / apply / un-apply / delete) ──
+  const { data: savedPlans } = useCuttingPlans(projectId, "building", building.id);
+  const savePlanMutation = useSaveCuttingPlan();
+  const updatePlanMutation = useUpdateCuttingPlan();
+  const applyMutation = useApplyCuttingPlan();
+  const unapplyMutation = useUnapplyCuttingPlan();
+  const deletePlanMutation = useDeleteCuttingPlan();
+
+  // The saved plan for the current (building, profileType) — may be applied or not
+  const savedPlan = useMemo(() => {
+    if (!savedPlans || !activeProfileType) return null;
+    return savedPlans.find(
+      (p) => p.scopeId === building.id && p.profileType === activeProfileType,
+    ) ?? null;
+  }, [savedPlans, activeProfileType, building.id]);
+
+  // The applied plan for the current (building, profileType) — if any
+  const appliedPlan = useMemo(() => {
+    return savedPlan?.isApplied ? savedPlan : null;
+  }, [savedPlan]);
+
+  // Track which plan is currently loaded in the optimizer (from DB or new optimization)
+  const [loadedPlanId, setLoadedPlanId] = useState<string | null>(null);
+  const [showReapplyConfirm, setShowReapplyConfirm] = useState(false);
+
+  // When switching profile types or groups, reset loaded plan tracking
+  useEffect(() => {
+    setLoadedPlanId(savedPlan?.id ?? null);
+  }, [savedPlan?.id, activeProfileType, activeGroupId]);
+
   const handleOptimize = useCallback(() => {
     if (!activePool) return;
 
@@ -359,18 +407,159 @@ export function OptimizationTab({
     dispatch({ type: ACTIONS.SET_OPTIMIZATION_STRATEGY, payload: optimizationStrategy });
 
     // Run optimization after state is set
-    setTimeout(() => {
+    setTimeout(async () => {
       dispatch({ type: ACTIONS.RUN_OPTIMIZE });
       setIsOptimizing(false);
       setHasOptimized(true);
+
+      // Compute the optimization result directly for auto-save
+      // (state.cuttingPlan is stale in this closure)
+      const result = optimize({
+        stockLengths,
+        demandPieces,
+        kerfWidth,
+        optimizationStrategy,
+      });
+
+      // Auto-save the plan to DB (create or update)
+      if (result && activeProfileType && activePool) {
+        const color = activePool.stock[0]?.color ?? "#000000";
+        try {
+          if (savedPlan && !savedPlan.isApplied) {
+            await updatePlanMutation.mutateAsync({
+              projectId,
+              planId: savedPlan.id,
+              data: {
+                bars: result.bars,
+                summary: result.summary,
+                kerfWidth,
+                strategy: optimizationStrategy,
+              },
+            });
+            setLoadedPlanId(savedPlan.id);
+          } else if (!savedPlan) {
+            const saved = await savePlanMutation.mutateAsync({
+              projectId,
+              data: {
+                scope: "building",
+                scopeId: building.id,
+                profileType: activeProfileType,
+                color,
+                bars: result.bars,
+                summary: result.summary,
+                kerfWidth,
+                strategy: optimizationStrategy,
+              },
+            });
+            setLoadedPlanId(saved.id);
+          }
+        } catch {
+          // Save failed silently — plan still shows in UI
+        }
+      }
     }, 100);
-  }, [activePool, dispatch, kerfWidth, optimizationStrategy]);
+  }, [activePool, dispatch, kerfWidth, optimizationStrategy, activeProfileType, projectId, building.id, savedPlan, savePlanMutation, updatePlanMutation]);
+
+  const handleApplyPlan = useCallback(async () => {
+    if (!state.cuttingPlan || !activeProfileType || !activePool) return;
+
+    // If there's already an applied plan, show confirmation dialog
+    if (appliedPlan) {
+      setShowReapplyConfirm(true);
+      return;
+    }
+
+    await doApplyPlan();
+  }, [state.cuttingPlan, activeProfileType, activePool, appliedPlan]);
+
+  const doApplyPlan = useCallback(async () => {
+    if (!state.cuttingPlan || !activeProfileType || !activePool) return;
+
+    // Use the existing saved plan if we have one, otherwise save first
+    let planId = loadedPlanId;
+
+    if (!planId) {
+      const color = activePool.stock[0]?.color ?? "#000000";
+      const saved = await savePlanMutation.mutateAsync({
+        projectId,
+        data: {
+          scope: "building",
+          scopeId: building.id,
+          profileType: activeProfileType,
+          color,
+          bars: state.cuttingPlan.bars,
+          summary: state.cuttingPlan.summary,
+          kerfWidth,
+          strategy: optimizationStrategy,
+        },
+      });
+      planId = saved.id;
+    }
+
+    // Apply the saved plan
+    await applyMutation.mutateAsync({
+      projectId,
+      planId: planId!,
+    });
+
+    setLoadedPlanId(planId);
+  }, [state.cuttingPlan, activeProfileType, activePool, projectId, building.id, kerfWidth, optimizationStrategy, loadedPlanId, savePlanMutation, applyMutation]);
+
+  const handleUnapplyPlan = useCallback(async () => {
+    if (!appliedPlan) return;
+    await unapplyMutation.mutateAsync({
+      projectId,
+      planId: appliedPlan.id,
+    });
+    // Plan still exists in DB, just not applied — keep loadedPlanId
+  }, [appliedPlan, projectId, unapplyMutation]);
+
+  const handleClearPlan = useCallback(async () => {
+    if (!savedPlan) {
+      dispatch({ type: ACTIONS.CLEAR_PLAN });
+      setHasOptimized(false);
+      return;
+    }
+    // If plan is applied, can't delete — un-apply first
+    if (savedPlan.isApplied) return;
+    await deletePlanMutation.mutateAsync({
+      projectId,
+      planId: savedPlan.id,
+    });
+    setLoadedPlanId(null);
+    setHasOptimized(false);
+    dispatch({ type: ACTIONS.CLEAR_PLAN });
+  }, [savedPlan, projectId, deletePlanMutation, dispatch]);
 
   // Reset optimized state when switching pools
   useEffect(() => {
     setHasOptimized(false);
     dispatch({ type: ACTIONS.CLEAR_PLAN });
   }, [activeProfileType, activeGroupId, dispatch]);
+
+  // Load saved plan from DB into AppContext for visualization (applied or not)
+  useEffect(() => {
+    if (!savedPlan || !activePool || hasOptimized) return;
+
+    const stockLengths = activePool.stock.map((s) => ({
+      id: s.id,
+      length: s.length ?? 0,
+      quantity: s.quantity,
+      isRemnant: s.isRemnant,
+      label: s.label ?? "",
+    }));
+
+    dispatch({ type: ACTIONS.SET_STOCK_LENGTHS, payload: stockLengths });
+    dispatch({
+      type: ACTIONS.LOAD_PLAN,
+      payload: {
+        bars: JSON.parse(savedPlan.bars),
+        summary: JSON.parse(savedPlan.summary),
+      },
+    });
+    setLoadedPlanId(savedPlan.id);
+    setHasOptimized(true);
+  }, [savedPlan, activePool, hasOptimized, dispatch]);
 
   const isLoading = templateQueries.some((q) => q.isLoading);
   const isLoadingTemplate = !!activeGroupId && !templateDetail;
@@ -450,17 +639,32 @@ export function OptimizationTab({
               </button>
             ))}
           </div>
-          <Button
-            onClick={handleOptimize}
-            disabled={isOptimizing || !activePool || activePool.stock.length === 0}
-          >
-            <HugeiconsIcon
-              icon={SparklesIcon}
-              size={14}
-              className={`mr-1.5 ${isOptimizing ? "animate-spin" : ""}`}
-            />
-            {isOptimizing ? "Working..." : "Optimize"}
-          </Button>
+          <div className="flex items-center gap-2">
+            {savedPlan && !savedPlan.isApplied && !appliedPlan && (
+              <Button
+                variant="ghost"
+                className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+                onClick={handleClearPlan}
+                disabled={deletePlanMutation.isPending}
+                title="Clear Plan"
+              >
+                <HugeiconsIcon icon={Delete02Icon} size={13} />
+                {deletePlanMutation.isPending ? 'Clearing...' : 'Clear'}
+              </Button>
+            )}
+            <Button
+              onClick={handleOptimize}
+              disabled={isOptimizing || !activePool || activePool.stock.length === 0 || !!appliedPlan}
+              title={appliedPlan ? "Un-apply the current plan to re-optimize" : undefined}
+            >
+              <HugeiconsIcon
+                icon={SparklesIcon}
+                size={14}
+                className={`mr-1.5 ${isOptimizing ? "animate-spin" : ""}`}
+              />
+              {isOptimizing ? "Working..." : "Optimize"}
+            </Button>
+          </div>
         </div>
       )}
 
@@ -482,7 +686,7 @@ export function OptimizationTab({
         </Card>
       )}
 
-      {activePool && activePool.stock.length > 0 && stockCheck && !stockCheck.sufficient && (
+      {activePool && activePool.stock.length > 0 && stockCheck && !stockCheck.sufficient && !savedPlan && (
         <Card className="border-amber-500/40 bg-amber-500/5">
           <CardContent className="px-4 py-2 flex items-start gap-3">
             <HugeiconsIcon icon={AlertCircleIcon} size={16} className="text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
@@ -532,7 +736,7 @@ export function OptimizationTab({
       })()}
 
       {/* Summary stats before optimization */}
-      {activePool && !hasOptimized && activePool.stock.length > 0 && stockCheck && (
+      {activePool && !state.isOptimized && activePool.stock.length > 0 && stockCheck && !savedPlan && (
         <div className="flex items-center gap-3 text-xs text-muted-foreground">
           <span><strong className="text-foreground">{activePool.pieces.reduce((s, p) => s + p.quantity, 0)}</strong> pieces</span>
           <span>·</span>
@@ -545,12 +749,51 @@ export function OptimizationTab({
       )}
 
       {/* Results */}
-      {hasOptimized && state.isOptimized && (
-        <ResultsPanel />
+      {state.isOptimized && state.cuttingPlan && (
+        <ResultsPanel
+          applyProps={{
+            isApplied: !!appliedPlan,
+            isSaved: !!savedPlan,
+            isSaving: savePlanMutation.isPending || updatePlanMutation.isPending,
+            isApplying: applyMutation.isPending,
+            isUnapplying: unapplyMutation.isPending,
+            onApply: handleApplyPlan,
+            onUnapply: handleUnapplyPlan,
+          }}
+        />
       )}
 
+
+      {/* Re-apply confirmation dialog */}
+      <Dialog open={showReapplyConfirm} onOpenChange={setShowReapplyConfirm}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Replace Applied Plan?</DialogTitle>
+          </DialogHeader>
+          <div className="text-sm text-muted-foreground py-2">
+            A cutting plan is already applied for this building's {profileTypeLabel(activeProfileType ?? "")}.
+            Applying a new plan will un-apply the old one first (restore consumed bars to stock),
+            then apply the new plan (consume bars from stock).
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowReapplyConfirm(false)}>
+              Cancel
+            </Button>
+            <Button
+              onClick={async () => {
+                setShowReapplyConfirm(false);
+                await doApplyPlan();
+              }}
+              disabled={applyMutation.isPending}
+            >
+              {applyMutation.isPending ? "Applying..." : "Replace & Apply"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {/* Empty state */}
-      {activePool && activePool.stock.length > 0 && !hasOptimized && (
+      {activePool && activePool.stock.length > 0 && !state.isOptimized && (
         <Card className="border-dashed">
           <CardContent className="flex flex-col items-center justify-center py-16 text-center">
             <HugeiconsIcon icon={ScissorIcon} size={32} className="text-muted-foreground mb-3" />

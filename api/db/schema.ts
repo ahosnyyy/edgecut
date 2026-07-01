@@ -344,5 +344,8 @@ export const cuttingPlans = sqliteTable("cutting_plans", {
   summary: text("summary").notNull(),
   kerfWidth: real("kerf_width").notNull(),
   strategy: text("strategy").notNull(),
+  isApplied: integer("is_applied", { mode: "boolean" })
+    .notNull()
+    .default(false),
   createdAt: integer("created_at").notNull(),
 });

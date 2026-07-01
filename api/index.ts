@@ -9,6 +9,7 @@ import { stockCatalogRoutes } from "./routes/stockCatalog.js";
 import { profileSystemRoutes } from "./routes/profileSystems.js";
 import { profileTypeRoutes } from "./routes/profileTypes.js";
 import { dashboardRoutes } from "./routes/dashboard.js";
+import { cuttingPlanRoutes } from "./routes/cuttingPlans.js";
 import { apiAuthMiddleware } from "./middleware/auth.js";
 
 export interface Env {
@@ -40,6 +41,7 @@ protectedApi.use("*", apiAuthMiddleware);
 // CRUD route groups
 protectedApi.route("/templates", templatesRoutes);
 protectedApi.route("/apartment-templates", apartmentTemplateRoutes);
+projectRoutes.route("/:id/cutting-plans", cuttingPlanRoutes);
 protectedApi.route("/projects", projectRoutes);
 protectedApi.route("/stock-catalog", stockCatalogRoutes);
 protectedApi.route("/profile-systems", profileSystemRoutes);
