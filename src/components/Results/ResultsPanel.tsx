@@ -6,7 +6,7 @@ import { validateMove } from '../../engine/optimizer';
 import {
   CircleGaugeIcon, ScissorIcon, PackageIcon, WasteIcon, DollarSignIcon,
   PrinterIcon, FileDownloadIcon, DragDropVerticalIcon, Recycle01Icon, Add01Icon, Delete02Icon, ListSettingIcon,
-  CheckmarkCircle01Icon, ArrowRight01Icon,
+  CheckmarkCircle01Icon, ArrowRight01Icon, Maximize02Icon, Minimize02Icon, Cancel01Icon,
 } from '@hugeicons/core-free-icons';
 import { HugeiconsIcon } from '@hugeicons/react';
 import { DndContext, DragOverlay, useDraggable, useDroppable, pointerWithin } from '@dnd-kit/core';
@@ -64,6 +64,7 @@ export default function ResultsPanel({ applyProps }: { applyProps?: ResultsPanel
   const [selectedEmptyStockId, setSelectedEmptyStockId] = useState('');
   const [isGroupedView, setIsGroupedView] = useState(true);
   const [sortByCount, setSortByCount] = useState(true);
+  const [isFullscreen, setIsFullscreen] = useState(false);
 
   const activeEmptyStock = stockLengths.find((s: any) => s.id === selectedEmptyStockId) || stockLengths[0];
 
@@ -269,6 +270,65 @@ export default function ResultsPanel({ applyProps }: { applyProps?: ResultsPanel
     dispatch({ type: ACTIONS.ADD_EMPTY_BAR, payload: { stockLengthId: activeEmptyStock.id } });
   };
 
+  const renderBars = () => {
+    const displayBars = isGroupedView ? groupBars(bars) : bars.map((b: any) => ({ ...b, count: 1 }));
+    if (isGroupedView && sortByCount) {
+      displayBars.sort((a: any, b: any) => b.count - a.count);
+    }
+    let displayBarCount = 0;
+    let displayRemnantCount = 0;
+    return displayBars.map((bar: any) => {
+      const displayIndex = bar.isRemnant ? displayRemnantCount++ : displayBarCount++;
+      return (
+        <BarVisualization
+          key={isGroupedView ? bar.signature : bar.id}
+          bar={bar}
+          index={displayIndex}
+          count={bar.count}
+          disableDnd={isGroupedView || !!applyProps?.isApplied}
+          unit={unit}
+          getColorForLength={getColorForLength}
+          dispatch={dispatch}
+          kerfWidth={kerfWidth}
+        />
+      );
+    });
+  };
+
+  const renderAddEmptyBar = () => {
+    if (!isGroupedView && !applyProps?.isApplied) {
+      return (
+        <div className="no-print flex gap-2 items-center pt-2">
+          {stockLengths.length > 1 && (
+            <Select value={activeEmptyStock?.id || ''} onValueChange={(val: string | null) => setSelectedEmptyStockId(val || '')}>
+              <SelectTrigger className="w-[180px]">
+                <SelectValue placeholder="Select stock length...">
+                  {activeEmptyStock
+                    ? `${activeEmptyStock.label} (${formatLength(activeEmptyStock.length, unit)})`
+                    : null}
+                </SelectValue>
+              </SelectTrigger>
+              <SelectContent>
+                {stockLengths.map((s: any) => (
+                  <SelectItem key={s.id} value={s.id}>{s.label} ({formatLength(s.length, unit)})</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
+          <Button
+            variant="outline"
+            className="flex-1 border-dashed text-muted-foreground hover:text-foreground"
+            onClick={handleAddEmptyBar}
+            title="Add an empty bar to use as a temporary workspace"
+          >
+            <HugeiconsIcon icon={Add01Icon} size={14} className="mr-1.5" /> Empty Bar
+          </Button>
+        </div>
+      );
+    }
+    return null;
+  };
+
   const handleDragStart = (event: any) => {
     const { active } = event;
     const { piece, bar } = active.data.current;
@@ -456,66 +516,50 @@ export default function ResultsPanel({ applyProps }: { applyProps?: ResultsPanel
               <Button variant="ghost" size="sm" onClick={handlePDF} title="Export PDF">
                 <HugeiconsIcon icon={FileDownloadIcon} size={13} /> PDF
               </Button>
+              <Button variant="ghost" size="sm" onClick={() => setIsFullscreen(true)} title="Fullscreen">
+                <HugeiconsIcon icon={Maximize02Icon} size={13} />
+              </Button>
             </div>
           </CardHeader>
           <Separator />
           <CardContent className="space-y-2 max-h-[35vh] overflow-y-auto">
-            {(() => {
-              const displayBars = isGroupedView ? groupBars(bars) : bars.map((b: any) => ({ ...b, count: 1 }));
-              if (isGroupedView && sortByCount) {
-                displayBars.sort((a: any, b: any) => b.count - a.count);
-              }
-              let displayBarCount = 0;
-              let displayRemnantCount = 0;
-              return displayBars.map((bar: any) => {
-                const displayIndex = bar.isRemnant ? displayRemnantCount++ : displayBarCount++;
-                return (
-                  <BarVisualization
-                    key={isGroupedView ? bar.signature : bar.id}
-                    bar={bar}
-                    index={displayIndex}
-                    count={bar.count}
-                    disableDnd={isGroupedView || !!applyProps?.isApplied}
-                    unit={unit}
-                    getColorForLength={getColorForLength}
-                    dispatch={dispatch}
-                    kerfWidth={kerfWidth}
-                  />
-                );
-              });
-            })()}
-
-            {!isGroupedView && !applyProps?.isApplied && (
-              <div className="no-print flex gap-2 items-center pt-2">
-                {stockLengths.length > 1 && (
-                  <Select value={activeEmptyStock?.id || ''} onValueChange={(val: string | null) => setSelectedEmptyStockId(val || '')}>
-                    <SelectTrigger className="w-[180px]">
-                      <SelectValue placeholder="Select stock length...">
-                        {activeEmptyStock
-                          ? `${activeEmptyStock.label} (${formatLength(activeEmptyStock.length, unit)})`
-                          : null}
-                      </SelectValue>
-                    </SelectTrigger>
-                    <SelectContent>
-                      {stockLengths.map((s: any) => (
-                        <SelectItem key={s.id} value={s.id}>{s.label} ({formatLength(s.length, unit)})</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                )}
-                <Button
-                  variant="outline"
-                  className="flex-1 border-dashed text-muted-foreground hover:text-foreground"
-                  onClick={handleAddEmptyBar}
-                  title="Add an empty bar to use as a temporary workspace"
-                >
-                  <HugeiconsIcon icon={Add01Icon} size={14} className="mr-1.5" /> Empty Bar
-                </Button>
-              </div>
-            )}
+            {renderBars()}
+            {renderAddEmptyBar()}
           </CardContent>
         </Card>
       </div>
+
+      {isFullscreen && createPortal(
+        <div className="fixed inset-0 z-50 bg-background flex flex-col">
+          <div className="flex items-center justify-between px-4 py-3 border-b">
+            <div className="flex items-center gap-2">
+              <HugeiconsIcon icon={ScissorIcon} size={16} />
+              <span className="font-medium">Cutting Plan</span>
+              {summary && (
+                <span className="text-xs text-muted-foreground ml-2">
+                  {summary.totalBars} bars · {summary.totalWastePercent}% waste
+                </span>
+              )}
+            </div>
+            <div className="flex items-center gap-1">
+              <Button variant="ghost" size="sm" onClick={handlePrint} title="Print">
+                <HugeiconsIcon icon={PrinterIcon} size={13} /> Print
+              </Button>
+              <Button variant="ghost" size="sm" onClick={handlePDF} title="Export PDF">
+                <HugeiconsIcon icon={FileDownloadIcon} size={13} /> PDF
+              </Button>
+              <Button variant="ghost" size="sm" onClick={() => setIsFullscreen(false)} title="Exit Fullscreen">
+                <HugeiconsIcon icon={Cancel01Icon} size={13} />
+              </Button>
+            </div>
+          </div>
+          <div className="flex-1 overflow-y-auto p-4 space-y-2">
+            {renderBars()}
+            {renderAddEmptyBar()}
+          </div>
+        </div>,
+        document.body,
+      )}
 
       {createPortal(
         <DragOverlay zIndex={1000}>

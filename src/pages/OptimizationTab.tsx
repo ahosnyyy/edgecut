@@ -20,6 +20,7 @@ import { optimize } from "../engine/optimizer";
 import ResultsPanel from "../components/Results/ResultsPanel";
 import { Button } from "../components/ui/button";
 import { Card, CardContent } from "../components/ui/card";
+import { Badge } from "../components/ui/badge";
 import { LoadingState } from "../components/ui/loading-states";
 import {
   Dialog,
@@ -365,6 +366,33 @@ export function OptimizationTab({
     return savedPlan?.isApplied ? savedPlan : null;
   }, [savedPlan]);
 
+  // Compute a signature of the current demand pieces for the active pool
+  const currentDemandSignature = useMemo(() => {
+    if (!activePool) return null;
+    return activePool.pieces.map((p) => `${p.label}:${p.length}:${p.quantity}`).sort().join('|');
+  }, [activePool]);
+
+  // Compute signature from the saved plan's bars (what was actually optimized)
+  const savedPlanDemandSignature = useMemo(() => {
+    if (!savedPlan) return null;
+    try {
+      const bars = JSON.parse(savedPlan.bars) as { pieces: { label: string; length: number }[] }[];
+      const pieceCounts = new Map<string, number>();
+      for (const bar of bars) {
+        for (const piece of bar.pieces ?? []) {
+          const key = `${piece.label}:${piece.length}`;
+          pieceCounts.set(key, (pieceCounts.get(key) ?? 0) + 1);
+        }
+      }
+      return Array.from(pieceCounts.entries()).map(([k, v]) => `${k}:${v}`).sort().join('|');
+    } catch {
+      return null;
+    }
+  }, [savedPlan]);
+
+  // Detect if demand pieces have changed since the plan was last optimized
+  const demandChanged = savedPlanDemandSignature !== null && currentDemandSignature !== null && savedPlanDemandSignature !== currentDemandSignature;
+
   // Track which plan is currently loaded in the optimizer (from DB or new optimization)
   const [loadedPlanId, setLoadedPlanId] = useState<string | null>(null);
   const [showReapplyConfirm, setShowReapplyConfirm] = useState(false);
@@ -617,27 +645,40 @@ export function OptimizationTab({
       {/* Profile type sub-tabs + Optimize button */}
       {poolsWithStock && poolsWithStock.length > 0 && (
         <div className="flex items-center justify-between gap-3">
-          <div className="inline-flex items-center gap-0.5 rounded-md bg-muted p-0.5">
-            {poolsWithStock.map((p) => (
-              <button
-                key={p.profileType}
-                type="button"
-                className={`px-3 py-1 text-xs font-medium rounded-md transition-all ${
-                  activeProfileType === p.profileType
-                    ? "bg-background text-foreground shadow-sm"
-                    : "text-muted-foreground hover:text-foreground"
-                }`}
-                onClick={() => setActiveProfileType(p.profileType)}
+          <div className="flex items-center gap-2">
+            <div className="inline-flex items-center gap-0.5 rounded-md bg-muted p-0.5">
+              {poolsWithStock.map((p) => (
+                <button
+                  key={p.profileType}
+                  type="button"
+                  className={`px-3 py-1 text-xs font-medium rounded-md transition-all ${
+                    activeProfileType === p.profileType
+                      ? "bg-background text-foreground shadow-sm"
+                      : "text-muted-foreground hover:text-foreground"
+                  }`}
+                  onClick={() => setActiveProfileType(p.profileType)}
+                >
+                  {profileTypeLabel(p.profileType)}
+                  {p.stock.length === 0 && (
+                    <span className="ml-1 text-amber-600 dark:text-amber-400">⚠</span>
+                  )}
+                  <span className="ml-1 text-[10px] text-muted-foreground">
+                    {p.pieces.reduce((s, pp) => s + pp.quantity, 0)} pcs
+                  </span>
+                </button>
+              ))}
+            </div>
+            {demandChanged && savedPlan && (
+              <Badge
+                variant="outline"
+                className={appliedPlan
+                  ? "border-amber-500/40 text-amber-700 dark:text-amber-300 bg-amber-500/5 gap-1"
+                  : "border-blue-500/40 text-blue-700 dark:text-blue-300 bg-blue-500/5 gap-1"}
               >
-                {profileTypeLabel(p.profileType)}
-                {p.stock.length === 0 && (
-                  <span className="ml-1 text-amber-600 dark:text-amber-400">⚠</span>
-                )}
-                <span className="ml-1 text-[10px] text-muted-foreground">
-                  {p.pieces.reduce((s, pp) => s + pp.quantity, 0)} pcs
-                </span>
-              </button>
-            ))}
+                <HugeiconsIcon icon={AlertCircleIcon} size={12} />
+                {appliedPlan ? "Sizes changed — un-apply & re-optimize" : "Sizes changed — re-optimize"}
+              </Badge>
+            )}
           </div>
           <div className="flex items-center gap-2">
             {savedPlan && !savedPlan.isApplied && !appliedPlan && (
