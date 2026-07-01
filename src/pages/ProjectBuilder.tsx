@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect, Fragment, type ReactNode } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import { useQueries } from "@tanstack/react-query";
 import {
   useProject,
@@ -137,7 +137,11 @@ export default function ProjectBuilder() {
   const [name, setName] = useState("");
   const [client, setClient] = useState("");
   const [status, setStatus] = useState<Project["status"]>("draft");
-  const [activeTab, setActiveTab] = useState("buildings");
+  const [projectSearchParams, setProjectSearchParams] = useSearchParams();
+  const activeTab = projectSearchParams.get("tab") ?? "buildings";
+  const setActiveTab = (v: string) => {
+    setProjectSearchParams(v === "buildings" ? {} : { tab: v }, { replace: true });
+  };
   const [kerfWidth, setKerfWidth] = useState(5);
   const [optimizationStrategy, setOptimizationStrategy] = useState<Project["optimizationStrategy"]>("maximize_large_bars");
   const [profileSystem, setProfileSystem] = useState<string[]>(["manazil"]);
@@ -1186,7 +1190,11 @@ export function BuildingDetail({
   canDelete: boolean;
   isDeletingBuilding: boolean;
 }) {
-  const [subTab, setSubTab] = useState("assignments");
+  const [searchParams, setSearchParams] = useSearchParams();
+  const subTab = searchParams.get("tab") ?? "assignments";
+  const setSubTab = (v: string) => {
+    setSearchParams(v === "assignments" ? {} : { tab: v }, { replace: true });
+  };
 
   return (
     <div className="flex flex-col gap-3">

@@ -1,4 +1,5 @@
 import { useState, useMemo } from "react";
+import { useSearchParams } from "react-router-dom";
 import {
   useProfileSystems,
   useCreateProfileSystem,
@@ -691,7 +692,11 @@ export default function ProfileSystemManager() {
   const [typesSearch, setTypesSearch] = useState("");
   const [templatesSearch, setTemplatesSearch] = useState("");
   const [templatesFilterType, setTemplatesFilterType] = useState<string>("all");
-  const [activeTab, setActiveTab] = useState("systems");
+  const [searchParams, setSearchParams] = useSearchParams();
+  const activeTab = searchParams.get("tab") ?? "systems";
+  const setActiveTab = (v: string) => {
+    setSearchParams(v === "systems" ? {} : { tab: v }, { replace: true });
+  };
 
   const editingSystem = editingId ? (systems?.find((s) => s.id === editingId) ?? null) : null;
 
