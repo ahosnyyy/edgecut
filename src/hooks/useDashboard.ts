@@ -15,6 +15,7 @@ export interface DemandCombo {
   demandLength: number;
   availableLength: number;
   covered: boolean;
+  unlimited: boolean;
   deficitBars: number;
   barLength: number;
 }

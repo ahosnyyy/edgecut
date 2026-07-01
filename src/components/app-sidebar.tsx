@@ -88,8 +88,8 @@ function RecentProjects() {
           <SidebarMenuItem key={p.id}>
             <SidebarMenuButton
               tooltip={p.name}
-              isActive={pathname.startsWith(`/projects/${p.id}`)}
-              render={<Link to={`/projects/${p.id}`}><span className="truncate">{p.name}</span></Link>}
+              isActive={pathname.startsWith(`/projects/${p.slug}`)}
+              render={<Link to={`/projects/${p.slug}`}><span className="truncate">{p.name}</span></Link>}
             />
           </SidebarMenuItem>
         ))}

@@ -431,7 +431,6 @@ function ProfileTypeEditor({
   const [label, setLabel] = useState(type?.label ?? "");
   const [error, setError] = useState<string | null>(null);
   const isEditing = !!type;
-  const isReserved = type?.isReserved ?? false;
 
   const handleSave = () => {
     setError(null);
@@ -462,12 +461,9 @@ function ProfileTypeEditor({
               value={key}
               onChange={(e) => setKey(e.target.value)}
               placeholder="e.g. reinforcement"
-              disabled={isEditing || isReserved}
+              disabled={isEditing}
               className="font-mono text-sm"
             />
-            {isReserved && (
-              <p className="text-xs text-muted-foreground">Reserved keys cannot be changed.</p>
-            )}
           </div>
           <div className="flex flex-col gap-1.5">
             <Label htmlFor="pt-label">Label</Label>
@@ -617,9 +613,8 @@ function ProfileTypesTab({ search, setSearch }: { search: string; setSearch: (v:
                         >
                           <HugeiconsIcon icon={PencilEdit01Icon} size={13} />
                         </Button>
-                        {!pt.isReserved && (
-                          <span onClick={(e) => e.stopPropagation()}>
-                            <DeleteGuardDialog
+                        <span onClick={(e) => e.stopPropagation()}>
+                          <DeleteGuardDialog
                               trigger={
                                 <Button
                                   variant="ghost"
@@ -639,7 +634,6 @@ function ProfileTypesTab({ search, setSearch }: { search: string; setSearch: (v:
                               isPending={deleteMutation.isPending}
                             />
                           </span>
-                        )}
                       </div>
                     </CardAction>
                     <CardTitle className="text-sm truncate flex items-center gap-1.5">
@@ -652,12 +646,6 @@ function ProfileTypesTab({ search, setSearch }: { search: string; setSearch: (v:
                   <CardFooter className="bg-muted/50 py-2.5">
                     <div className="flex items-center justify-between w-full gap-2 text-[10px] text-muted-foreground">
                       <div className="flex items-center gap-2">
-                        {pt.isReserved ? (
-                          <Badge variant="secondary" className="text-[9px] px-1 py-0 h-4">Reserved</Badge>
-                        ) : (
-                          <Badge variant="outline" className="text-[9px] px-1 py-0 h-4">Custom</Badge>
-                        )}
-                        <Separator orientation="vertical" className="my-0.5" />
                         <span>Created {new Date(pt.createdAt).toLocaleDateString("en-GB")}</span>
                       </div>
                     </div>

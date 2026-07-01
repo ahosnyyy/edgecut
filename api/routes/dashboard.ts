@@ -30,6 +30,7 @@ interface DemandCombo {
   demandLength: number;
   availableLength: number;
   covered: boolean;
+  unlimited: boolean;
   deficitBars: number;
   barLength: number;
 }
@@ -202,6 +203,7 @@ dashboardRoutes.get("/stock-coverage", async (c) => {
       demandLength: Math.round(d.length),
       availableLength: Math.round(availableLength),
       covered,
+      unlimited,
       deficitBars,
       barLength,
     });

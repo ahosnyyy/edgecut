@@ -1,4 +1,4 @@
-import { sqliteTable, text, integer, real } from "drizzle-orm/sqlite-core";
+import { sqliteTable, text, integer, real, uniqueIndex } from "drizzle-orm/sqlite-core";
 
 // ─── Users ───────────────────────────────────────────────────────────────────
 
@@ -15,6 +15,7 @@ export const users = sqliteTable("users", {
 export const projects = sqliteTable("projects", {
   id: text("id").primaryKey(),
   name: text("name").notNull(),
+  slug: text("slug").unique().notNull(),
   client: text("client"),
   status: text("status", {
     enum: ["draft", "active", "completed", "archived"],
@@ -93,6 +94,7 @@ export const buildings = sqliteTable("buildings", {
     .notNull()
     .references(() => projects.id, { onDelete: "cascade" }),
   name: text("name").notNull(),
+  slug: text("slug").notNull(),
   floors: integer("floors").notNull().default(1),
   apartmentsPerFloor: integer("apartments_per_floor").notNull().default(1),
   floorLabels: text("floor_labels").notNull().default("[]"),
@@ -103,7 +105,9 @@ export const buildings = sqliteTable("buildings", {
     .notNull()
     .default("draft"),
   createdAt: integer("created_at").notNull(),
-});
+}, (table) => ({
+  projectSlugIdx: uniqueIndex("buildings_project_slug_idx").on(table.projectId, table.slug),
+}));
 
 // ─── Levels (floors in a building) ───────────────────────────────────────────
 
@@ -230,9 +234,6 @@ export const profileTypes = sqliteTable("profile_types", {
   key: text("key").notNull().unique(),
   label: text("label").notNull(),
   sortOrder: integer("sort_order").notNull().default(0),
-  isReserved: integer("is_reserved", { mode: "boolean" })
-    .notNull()
-    .default(false),
   createdAt: integer("created_at").notNull(),
 });
 

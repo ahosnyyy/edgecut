@@ -135,11 +135,11 @@ async function seed() {
   console.log("Seeding profile types...");
 
   const defaultProfileTypes = [
-    { key: "frame", label: "Frame", isReserved: true },
-    { key: "sash", label: "Sash", isReserved: true },
-    { key: "mullion", label: "Mullion", isReserved: true },
-    { key: "bead", label: "Bead", isReserved: true },
-    { key: "custom", label: "Custom", isReserved: true },
+    { key: "frame", label: "Frame" },
+    { key: "sash", label: "Sash" },
+    { key: "mullion", label: "Mullion" },
+    { key: "bead", label: "Bead" },
+    { key: "custom", label: "Custom" },
   ];
 
   for (let i = 0; i < defaultProfileTypes.length; i++) {
@@ -149,7 +149,6 @@ async function seed() {
       key: pt.key,
       label: pt.label,
       sortOrder: i,
-      isReserved: pt.isReserved,
       createdAt: now,
     });
     console.log(`  ✓ ${pt.label} (${pt.key})`);

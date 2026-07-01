@@ -204,10 +204,12 @@ export default function Dashboard() {
                       <span className="text-sm font-semibold capitalize">{system}</span>
                       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
                         {types.map((d) => {
-                          const covPct = d.demandLength > 0
-                            ? Math.min(100, Math.round((d.availableLength / d.demandLength) * 100))
-                            : 100;
-                          const deficit = Math.max(0, d.demandLength - d.availableLength);
+                          const covPct = d.unlimited
+                            ? 100
+                            : d.demandLength > 0
+                              ? Math.min(100, Math.round((d.availableLength / d.demandLength) * 100))
+                              : 100;
+                          const deficit = d.unlimited ? 0 : Math.max(0, d.demandLength - d.availableLength);
                           const status = d.covered ? "covered" : covPct >= 60 ? "short" : "critical";
                           const statusLabel = d.covered ? "Covered" : covPct >= 60 ? "Short" : "Critical";
                           const barColor = d.covered
@@ -256,13 +258,13 @@ export default function Dashboard() {
                               {/* Have / Need */}
                               <div className="flex items-center justify-between text-[10px] text-muted-foreground">
                                 <span className="tabular-nums">
-                                  {formatLength(d.availableLength, false)} / {formatLength(d.demandLength, false)} {unitLabel}
+                                  {d.unlimited ? "\u221e" : formatLength(d.availableLength, false)} / {formatLength(d.demandLength, false)} {unitLabel}
                                 </span>
                                 <span className={
                                   "tabular-nums font-medium " +
                                   (d.covered ? "text-emerald-600 dark:text-emerald-400" : "text-destructive")
                                 }>
-                                  {covPct}%
+                                  {d.unlimited ? "\u221e" : `${covPct}%`}
                                 </span>
                               </div>
 

@@ -331,6 +331,7 @@ export default function ProjectBuilder() {
             <TabsContent value="buildings">
               <BuildingsManager
                 projectId={id!}
+                projectSlug={project.slug}
                 buildings={buildings}
                 onCreateBuilding={createBuildingMutation.mutateAsync}
                 search={buildingSearch}
@@ -1432,6 +1433,7 @@ function BuildingSettings({
 
 export interface BuildingLike {
   id: string;
+  slug: string;
   name: string;
   floors: number;
   apartmentsPerFloor: number;
@@ -1442,9 +1444,10 @@ export interface BuildingLike {
 }
 
 function BuildingsManager({
-  projectId, buildings, onCreateBuilding, search, setSearch, filterStatus, setFilterStatus,
+  projectId, projectSlug, buildings, onCreateBuilding, search, setSearch, filterStatus, setFilterStatus,
 }: {
   projectId: string;
+  projectSlug: string;
   buildings: BuildingLike[];
   onCreateBuilding: (args: { projectId: string; data: { name: string; floors?: number; apartmentsPerFloor?: number; floorLabels?: string[] } }) => Promise<any>;
   search: string;
@@ -1542,7 +1545,7 @@ function BuildingsManager({
           </Card>
           {filtered.map((b) => {
             return (
-              <Card key={b.id} size="sm" className={`pb-0 cursor-pointer hover:border-primary/40 transition-colors${b.status === "archived" ? " opacity-50" : ""}`} onClick={() => navigate(`/projects/${projectId}/buildings/${b.id}`)}>
+              <Card key={b.id} size="sm" className={`pb-0 cursor-pointer hover:border-primary/40 transition-colors${b.status === "archived" ? " opacity-50" : ""}`} onClick={() => navigate(`/projects/${projectSlug}/buildings/${b.slug}`)}>
                 <CardHeader className="pb-1">
                   <CardAction>
                     <Badge variant="secondary" className={

@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import { eq, and, sql } from "drizzle-orm";
+import { eq, and, sql, or, like } from "drizzle-orm";
 import { getDb } from "../db/client.js";
 import {
   projects,
@@ -16,11 +16,43 @@ import {
 } from "../db/schema.js";
 import type { Env } from "../index.js";
 import { evalFormula } from "../lib/formula.js";
+import { nameToSlug, generateUniqueSlug } from "../lib/slug.js";
 
 export const projectRoutes = new Hono<{ Bindings: Env }>();
 
 function generateId(): string {
   return crypto.randomUUID();
+}
+
+/**
+ * Resolve a project by slug or UUID.
+ * Returns the project row or null.
+ */
+async function resolveProject(db: ReturnType<typeof getDb>, identifier: string) {
+  const rows = await db
+    .select()
+    .from(projects)
+    .where(or(eq(projects.slug, identifier), eq(projects.id, identifier)))
+    .limit(1);
+  return rows[0] ?? null;
+}
+
+/**
+ * Resolve a building by slug or UUID within a project.
+ * Returns the building row or null.
+ */
+async function resolveBuilding(db: ReturnType<typeof getDb>, projectId: string, identifier: string) {
+  const rows = await db
+    .select()
+    .from(buildings)
+    .where(
+      and(
+        eq(buildings.projectId, projectId),
+        or(eq(buildings.slug, identifier), eq(buildings.id, identifier)),
+      ),
+    )
+    .limit(1);
+  return rows[0] ?? null;
 }
 
 type BuildingStatus = "draft" | "active" | "completed" | "archived";
@@ -40,6 +72,7 @@ projectRoutes.get("/", async (c) => {
   const rows = await db
     .select({
       id: projects.id,
+      slug: projects.slug,
       name: projects.name,
       client: projects.client,
       status: projects.status,
@@ -61,36 +94,32 @@ projectRoutes.get("/", async (c) => {
 
 projectRoutes.get("/:id", async (c) => {
   const db = getDb(c.env);
-  const id = c.req.param("id");
+  const identifier = c.req.param("id");
 
-  const proj = await db
-    .select()
-    .from(projects)
-    .where(eq(projects.id, id))
-    .limit(1);
-  if (proj.length === 0) {
+  const proj = await resolveProject(db, identifier);
+  if (!proj) {
     return c.json({ error: "Project not found" }, 404);
   }
 
   const bldgs = await db
     .select()
     .from(buildings)
-    .where(eq(buildings.projectId, id))
+    .where(eq(buildings.projectId, proj.id))
     .orderBy(buildings.sortOrder);
 
   const assignments = await db
     .select()
     .from(projectFloorAssignments)
-    .where(eq(projectFloorAssignments.projectId, id));
+    .where(eq(projectFloorAssignments.projectId, proj.id));
 
   const sizes = await db
     .select()
     .from(projectOpeningSizes)
-    .where(eq(projectOpeningSizes.projectId, id));
+    .where(eq(projectOpeningSizes.projectId, proj.id));
 
   return c.json({
-    ...proj[0],
-    profileSystem: JSON.parse(proj[0].profileSystem),
+    ...proj,
+    profileSystem: JSON.parse(proj.profileSystem),
     buildings: bldgs,
     assignments,
     openingSizes: sizes,
@@ -111,12 +140,18 @@ projectRoutes.post("/", async (c) => {
     return c.json({ error: "Name is required" }, 400);
   }
 
+  // Generate unique project slug
+  const existingProjectSlugs = await db.select({ slug: projects.slug }).from(projects);
+  const slugSet = new Set(existingProjectSlugs.map((p) => p.slug));
+  const projectSlug = generateUniqueSlug(body.name, slugSet);
+
   const now = Date.now();
   const id = generateId();
   const buildingId = generateId();
 
   await db.insert(projects).values({
     id,
+    slug: projectSlug,
     name: body.name,
     client: body.client ?? null,
     notes: body.notes ?? null,
@@ -132,6 +167,7 @@ projectRoutes.post("/", async (c) => {
   await db.insert(buildings).values({
     id: buildingId,
     projectId: id,
+    slug: "building-a",
     name: "Building A",
     floors: 6,
     apartmentsPerFloor: 4,
@@ -140,21 +176,17 @@ projectRoutes.post("/", async (c) => {
     createdAt: now,
   });
 
-  return c.json({ id, name: body.name, buildingId }, 201);
+  return c.json({ id, slug: projectSlug, name: body.name, buildingId }, 201);
 });
 
 // ─── PUT /api/projects/:id — Update basic info ────────────────────────────────
 
 projectRoutes.put("/:id", async (c) => {
   const db = getDb(c.env);
-  const id = c.req.param("id");
+  const identifier = c.req.param("id");
 
-  const existing = await db
-    .select()
-    .from(projects)
-    .where(eq(projects.id, id))
-    .limit(1);
-  if (existing.length === 0) {
+  const existing = await resolveProject(db, identifier);
+  if (!existing) {
     return c.json({ error: "Project not found" }, 404);
   }
 
@@ -171,41 +203,59 @@ projectRoutes.put("/:id", async (c) => {
     profileSystem?: string[];
   }>();
 
+  // Regenerate slug if name changed
+  let newSlug = existing.slug;
+  if (body.name && body.name !== existing.name) {
+    const existingProjectSlugs = await db
+      .select({ slug: projects.slug })
+      .from(projects)
+      .where(sql`${projects.id} != ${existing.id}`);
+    const slugSet = new Set(existingProjectSlugs.map((p) => p.slug));
+    newSlug = generateUniqueSlug(body.name, slugSet);
+  }
+
   const now = Date.now();
-  const newStatus = (body.status as "draft" | "active" | "completed" | "archived") ?? existing[0].status;
+  const newStatus = (body.status as "draft" | "active" | "completed" | "archived") ?? existing.status;
   await db
     .update(projects)
     .set({
-      name: body.name ?? existing[0].name,
-      client: body.client ?? existing[0].client,
-      notes: body.notes ?? existing[0].notes,
+      slug: newSlug,
+      name: body.name ?? existing.name,
+      client: body.client ?? existing.client,
+      notes: body.notes ?? existing.notes,
       status: newStatus,
-      measurementSystem: (body.measurementSystem as "metric" | "imperial") ?? existing[0].measurementSystem,
-      unit: body.unit ?? existing[0].unit,
-      kerfWidth: body.kerfWidth ?? existing[0].kerfWidth,
-      pricePerBar: body.pricePerBar ?? existing[0].pricePerBar,
-      optimizationStrategy: (body.optimizationStrategy as "balanced" | "maximize_large_bars") ?? existing[0].optimizationStrategy,
-      profileSystem: body.profileSystem ? JSON.stringify(body.profileSystem) : existing[0].profileSystem,
+      measurementSystem: (body.measurementSystem as "metric" | "imperial") ?? existing.measurementSystem,
+      unit: body.unit ?? existing.unit,
+      kerfWidth: body.kerfWidth ?? existing.kerfWidth,
+      pricePerBar: body.pricePerBar ?? existing.pricePerBar,
+      optimizationStrategy: (body.optimizationStrategy as "balanced" | "maximize_large_bars") ?? existing.optimizationStrategy,
+      profileSystem: body.profileSystem ? JSON.stringify(body.profileSystem) : existing.profileSystem,
       updatedAt: now,
     })
-    .where(eq(projects.id, id));
+    .where(eq(projects.id, existing.id));
 
   // When archiving project, archive all buildings too
   if (newStatus === "archived") {
     await db
       .update(buildings)
       .set({ status: "archived" })
-      .where(eq(buildings.projectId, id));
+      .where(eq(buildings.projectId, existing.id));
   }
 
-  return c.json({ id, updated: true });
+  return c.json({ id: existing.id, slug: newSlug, updated: true });
 });
 
 // ─── DELETE /api/projects/:id ─────────────────────────────────────────────────
 
 projectRoutes.delete("/:id", async (c) => {
   const db = getDb(c.env);
-  const id = c.req.param("id");
+  const identifier = c.req.param("id");
+
+  const proj = await resolveProject(db, identifier);
+  if (!proj) {
+    return c.json({ error: "Project not found" }, 404);
+  }
+  const id = proj.id;
 
   // Release reservedQty on linked stock defaults for all project stock entries
   const projectStock = await db
@@ -243,7 +293,7 @@ projectRoutes.delete("/:id", async (c) => {
 
 projectRoutes.post("/:id/buildings", async (c) => {
   const db = getDb(c.env);
-  const id = c.req.param("id");
+  const identifier = c.req.param("id");
   const body = await c.req.json<{
     name: string;
     floors?: number;
@@ -256,16 +306,27 @@ projectRoutes.post("/:id/buildings", async (c) => {
     return c.json({ error: "Building name is required" }, 400);
   }
 
+  const proj = await resolveProject(db, identifier);
+  if (!proj) {
+    return c.json({ error: "Project not found" }, 404);
+  }
+  const id = proj.id;
+
   const existing = await db
     .select()
     .from(buildings)
     .where(eq(buildings.projectId, id));
   const sortOrder = existing.length;
 
+  // Generate unique building slug within project
+  const existingSlugs = new Set(existing.map((b) => b.slug));
+  const buildingSlug = generateUniqueSlug(body.name, existingSlugs);
+
   const buildingId = generateId();
   await db.insert(buildings).values({
     id: buildingId,
     projectId: id,
+    slug: buildingSlug,
     name: body.name,
     floors: body.floors ?? 6,
     apartmentsPerFloor: body.apartmentsPerFloor ?? 4,
@@ -275,22 +336,23 @@ projectRoutes.post("/:id/buildings", async (c) => {
     createdAt: Date.now(),
   });
 
-  return c.json({ id: buildingId, name: body.name }, 201);
+  return c.json({ id: buildingId, slug: buildingSlug, name: body.name }, 201);
 });
 
 // ─── PUT /api/projects/:id/buildings/:buildingId — Update building ────────────
 
 projectRoutes.put("/:id/buildings/:buildingId", async (c) => {
   const db = getDb(c.env);
-  const id = c.req.param("id");
-  const buildingId = c.req.param("buildingId");
+  const identifier = c.req.param("id");
+  const buildingIdentifier = c.req.param("buildingId");
 
-  const existing = await db
-    .select()
-    .from(buildings)
-    .where(eq(buildings.id, buildingId))
-    .limit(1);
-  if (existing.length === 0) {
+  const proj = await resolveProject(db, identifier);
+  if (!proj) {
+    return c.json({ error: "Project not found" }, 404);
+  }
+
+  const existing = await resolveBuilding(db, proj.id, buildingIdentifier);
+  if (!existing) {
     return c.json({ error: "Building not found" }, 404);
   }
 
@@ -302,40 +364,63 @@ projectRoutes.put("/:id/buildings/:buildingId", async (c) => {
     status?: string;
   }>();
 
+  // Regenerate slug if name changed
+  let newSlug = existing.slug;
+  if (body.name && body.name !== existing.name) {
+    const siblings = await db
+      .select({ slug: buildings.slug })
+      .from(buildings)
+      .where(sql`${buildings.projectId} = ${proj.id} AND ${buildings.id} != ${existing.id}`);
+    const slugSet = new Set(siblings.map((b) => b.slug));
+    newSlug = generateUniqueSlug(body.name, slugSet);
+  }
+
   await db
     .update(buildings)
     .set({
-      name: body.name ?? existing[0].name,
-      floors: body.floors ?? existing[0].floors,
-      apartmentsPerFloor: body.apartmentsPerFloor ?? existing[0].apartmentsPerFloor,
+      slug: newSlug,
+      name: body.name ?? existing.name,
+      floors: body.floors ?? existing.floors,
+      apartmentsPerFloor: body.apartmentsPerFloor ?? existing.apartmentsPerFloor,
       floorLabels: body.floorLabels
         ? JSON.stringify(body.floorLabels)
-        : existing[0].floorLabels,
-      status: (body.status as "draft" | "active" | "completed" | "archived") ?? existing[0].status,
+        : existing.floorLabels,
+      status: (body.status as "draft" | "active" | "completed" | "archived") ?? existing.status,
     })
-    .where(eq(buildings.id, buildingId));
+    .where(eq(buildings.id, existing.id));
 
   // Derive project status from building statuses
   const allBuildings = await db
     .select({ status: buildings.status })
     .from(buildings)
-    .where(eq(buildings.projectId, id));
+    .where(eq(buildings.projectId, proj.id));
 
   const derivedStatus = deriveProjectStatus(allBuildings.map((b) => b.status));
   await db
     .update(projects)
     .set({ status: derivedStatus, updatedAt: Date.now() })
-    .where(eq(projects.id, id));
+    .where(eq(projects.id, proj.id));
 
-  return c.json({ id: buildingId, updated: true, projectStatus: derivedStatus });
+  return c.json({ id: existing.id, slug: newSlug, updated: true, projectStatus: derivedStatus });
 });
 
 // ─── DELETE /api/projects/:id/buildings/:buildingId ───────────────────────────
 
 projectRoutes.delete("/:id/buildings/:buildingId", async (c) => {
   const db = getDb(c.env);
-  const id = c.req.param("id");
-  const buildingId = c.req.param("buildingId");
+  const identifier = c.req.param("id");
+  const buildingIdentifier = c.req.param("buildingId");
+
+  const proj = await resolveProject(db, identifier);
+  if (!proj) {
+    return c.json({ error: "Project not found" }, 404);
+  }
+
+  const bldg = await resolveBuilding(db, proj.id, buildingIdentifier);
+  if (!bldg) {
+    return c.json({ error: "Building not found" }, 404);
+  }
+  const buildingId = bldg.id;
 
   await db.delete(projectFloorAssignments).where(eq(projectFloorAssignments.buildingId, buildingId));
   await db.delete(projectOpeningSizes).where(eq(projectOpeningSizes.buildingId, buildingId));
@@ -345,12 +430,12 @@ projectRoutes.delete("/:id/buildings/:buildingId", async (c) => {
   const remaining = await db
     .select({ status: buildings.status })
     .from(buildings)
-    .where(eq(buildings.projectId, id));
+    .where(eq(buildings.projectId, proj.id));
   const derivedStatus = deriveProjectStatus(remaining.map((b) => b.status));
   await db
     .update(projects)
     .set({ status: derivedStatus, updatedAt: Date.now() })
-    .where(eq(projects.id, id));
+    .where(eq(projects.id, proj.id));
 
   return c.json({ deleted: true, projectStatus: derivedStatus });
 });
@@ -359,8 +444,16 @@ projectRoutes.delete("/:id/buildings/:buildingId", async (c) => {
 
 projectRoutes.put("/:id/buildings/:buildingId/assignments", async (c) => {
   const db = getDb(c.env);
-  const id = c.req.param("id");
-  const buildingId = c.req.param("buildingId");
+  const identifier = c.req.param("id");
+  const buildingIdentifier = c.req.param("buildingId");
+
+  const proj = await resolveProject(db, identifier);
+  if (!proj) return c.json({ error: "Project not found" }, 404);
+  const bldg = await resolveBuilding(db, proj.id, buildingIdentifier);
+  if (!bldg) return c.json({ error: "Building not found" }, 404);
+
+  const id = proj.id;
+  const buildingId = bldg.id;
   const body = await c.req.json<{
     assignments: {
       floor: number;
@@ -393,8 +486,16 @@ projectRoutes.put("/:id/buildings/:buildingId/assignments", async (c) => {
 
 projectRoutes.put("/:id/buildings/:buildingId/opening-sizes", async (c) => {
   const db = getDb(c.env);
-  const id = c.req.param("id");
-  const buildingId = c.req.param("buildingId");
+  const identifier = c.req.param("id");
+  const buildingIdentifier = c.req.param("buildingId");
+
+  const proj = await resolveProject(db, identifier);
+  if (!proj) return c.json({ error: "Project not found" }, 404);
+  const bldg = await resolveBuilding(db, proj.id, buildingIdentifier);
+  if (!bldg) return c.json({ error: "Building not found" }, 404);
+
+  const id = proj.id;
+  const buildingId = bldg.id;
   const body = await c.req.json<{
     sizes: {
       apartmentTemplateOpeningId: string;
@@ -429,16 +530,13 @@ projectRoutes.put("/:id/buildings/:buildingId/opening-sizes", async (c) => {
 
 projectRoutes.get("/:id/pieces", async (c) => {
   const db = getDb(c.env);
-  const id = c.req.param("id");
+  const identifier = c.req.param("id");
 
-  const proj = await db
-    .select()
-    .from(projects)
-    .where(eq(projects.id, id))
-    .limit(1);
-  if (proj.length === 0) {
+  const proj = await resolveProject(db, identifier);
+  if (!proj) {
     return c.json({ error: "Project not found" }, 404);
   }
+  const id = proj.id;
 
   const bldgs = await db
     .select()
@@ -559,7 +657,7 @@ projectRoutes.get("/:id/pieces", async (c) => {
   }
 
   return c.json({
-    project: proj[0],
+    project: proj,
     buildings: bldgs,
     pools: Object.values(pools),
   });
@@ -569,12 +667,15 @@ projectRoutes.get("/:id/pieces", async (c) => {
 
 projectRoutes.get("/:id/stock", async (c) => {
   const db = getDb(c.env);
-  const id = c.req.param("id");
+  const identifier = c.req.param("id");
+
+  const proj = await resolveProject(db, identifier);
+  if (!proj) return c.json({ error: "Project not found" }, 404);
 
   const rows = await db
     .select()
     .from(stock)
-    .where(eq(stock.projectId, id));
+    .where(eq(stock.projectId, proj.id));
 
   return c.json(rows);
 });
@@ -583,7 +684,11 @@ projectRoutes.get("/:id/stock", async (c) => {
 
 projectRoutes.post("/:id/stock", async (c) => {
   const db = getDb(c.env);
-  const id = c.req.param("id");
+  const identifier = c.req.param("id");
+
+  const proj = await resolveProject(db, identifier);
+  if (!proj) return c.json({ error: "Project not found" }, 404);
+  const id = proj.id;
   const body = await c.req.json<{
     profileType: string;
     color: string;

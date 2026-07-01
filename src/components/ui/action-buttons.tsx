@@ -81,6 +81,8 @@ const referenceTypeLabels: Record<string, string> = {
   apartment_template: "Apartment Template",
   piece_template: "Piece Template",
   project: "Project",
+  stock_catalog: "Stock Catalog",
+  project_stock: "Project Stock",
 };
 
 interface DeleteGuardDialogProps {

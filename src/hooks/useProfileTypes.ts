@@ -6,7 +6,6 @@ export interface ProfileType {
   key: string;
   label: string;
   sortOrder: number;
-  isReserved: boolean;
   createdAt: number;
 }
 

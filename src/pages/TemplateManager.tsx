@@ -636,13 +636,6 @@ function TemplateEditor({
               {form.pieces.map((p, i) => (
                 <div key={i} className="flex items-center gap-2 rounded-md border bg-muted/30 px-2 py-1.5">
                   <span className="text-[10px] text-muted-foreground w-4 shrink-0 text-center font-medium">{i + 1}</span>
-                  <Input
-                    value={p.label}
-                    onChange={(e) => updatePiece(i, "label", e.target.value)}
-                    disabled={isBuiltin}
-                    placeholder="Frame Width"
-                    className="text-xs h-7 border-0 bg-background w-28 shrink-0"
-                  />
                   <Select
                     value={p.profileType}
                     onValueChange={(v: PieceRow["profileType"] | null) => updatePiece(i, "profileType", v ?? "frame")}
@@ -659,6 +652,13 @@ function TemplateEditor({
                       ))}
                     </SelectContent>
                   </Select>
+                  <Input
+                    value={p.label}
+                    onChange={(e) => updatePiece(i, "label", e.target.value)}
+                    disabled={isBuiltin}
+                    placeholder="Frame Width"
+                    className="text-xs h-7 border-0 bg-background w-28 shrink-0"
+                  />
                   <Input
                     value={p.lengthFormula}
                     onChange={(e) => updatePiece(i, "lengthFormula", e.target.value)}
@@ -737,8 +737,8 @@ function TemplateEditor({
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead className="h-7 text-xs">Label</TableHead>
                     <TableHead className="h-7 text-xs">Profile</TableHead>
+                    <TableHead className="h-7 text-xs">Label</TableHead>
                     <TableHead className="h-7 text-xs text-right">Length ({unitLabel})</TableHead>
                     <TableHead className="h-7 text-xs text-right">Qty</TableHead>
                   </TableRow>
@@ -746,8 +746,8 @@ function TemplateEditor({
                 <TableBody>
                   {previewPieces.pieces.map((p, i) => (
                     <TableRow key={i}>
-                      <TableCell className="text-xs py-1.5">{p.label}</TableCell>
                       <TableCell className="text-xs py-1.5">{profileTypes?.find((pt) => pt.key === p.profileType)?.label ?? p.profileType}</TableCell>
+                      <TableCell className="text-xs py-1.5">{p.label}</TableCell>
                       <TableCell className="text-xs py-1.5 text-right font-mono">{convertFromMM(p.length).toFixed(1)}</TableCell>
                       <TableCell className="text-xs py-1.5 text-right">{p.quantity}</TableCell>
                     </TableRow>
@@ -768,8 +768,8 @@ function TemplateEditor({
                   )}
                   {previewPieces.pieces.length > 0 && (
                     <TableRow className="border-t-2 font-medium bg-muted/30">
-                      <TableCell className="text-xs py-1.5">Total</TableCell>
                       <TableCell className="text-xs py-1.5 text-muted-foreground"></TableCell>
+                      <TableCell className="text-xs py-1.5">Total</TableCell>
                       <TableCell className="text-xs py-1.5 text-right font-mono"></TableCell>
                       <TableCell className="text-xs py-1.5 text-right">{previewPieces.pieces.reduce((s, p) => s + p.quantity, 0)} cuts</TableCell>
                     </TableRow>

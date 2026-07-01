@@ -47,7 +47,7 @@ export default function ProjectsList() {
     setShowCreate(false);
     setName("");
     setClient("");
-    navigate(`/projects/${result.id}`);
+    navigate(`/projects/${result.slug}`);
   };
 
   const filtered = useMemo(() => {
@@ -173,7 +173,7 @@ export default function ProjectsList() {
                   key={p.id}
                   size="sm"
                   className="cursor-pointer hover:border-primary/40 transition-colors pb-0 flex flex-col"
-                  onClick={() => navigate(`/projects/${p.id}`)}
+                  onClick={() => navigate(`/projects/${p.slug}`)}
                 >
                   <CardHeader className="pb-1">
                     <CardAction>

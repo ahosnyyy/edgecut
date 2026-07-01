@@ -3,6 +3,7 @@ import { apiFetch } from "../auth/apiClient";
 
 export interface Project {
   id: string;
+  slug: string;
   name: string;
   client: string | null;
   status: "draft" | "active" | "completed" | "archived";
@@ -26,6 +27,7 @@ export interface Project {
 export interface Building {
   id: string;
   projectId: string;
+  slug: string;
   name: string;
   floors: number;
   apartmentsPerFloor: number;
@@ -97,7 +99,7 @@ export function useCreateProject() {
       name: string;
       client?: string;
       notes?: string;
-    }) => apiFetch<{ id: string }>("/api/projects", {
+    }) => apiFetch<{ id: string; slug: string }>("/api/projects", {
       method: "POST",
       body: JSON.stringify(data),
     }),

@@ -28,7 +28,7 @@ export default function BuildingDetailPage() {
   }
 
   const buildings = project.buildings ?? [];
-  const buildingIndex = buildings.findIndex((b) => b.id === buildingId);
+  const buildingIndex = buildings.findIndex((b) => b.slug === buildingId || b.id === buildingId);
   const building = buildings[buildingIndex] ?? null;
 
   if (!building) {
@@ -47,12 +47,12 @@ export default function BuildingDetailPage() {
 
   const goNext = () => {
     const next = buildings[buildingIndex + 1];
-    if (next) navigate(`/projects/${id}/buildings/${next.id}`);
+    if (next) navigate(`/projects/${project.slug}/buildings/${next.slug}`);
   };
 
   const goPrev = () => {
     const prev = buildings[buildingIndex - 1];
-    if (prev) navigate(`/projects/${id}/buildings/${prev.id}`);
+    if (prev) navigate(`/projects/${project.slug}/buildings/${prev.slug}`);
   };
 
   return (
@@ -73,7 +73,7 @@ export default function BuildingDetailPage() {
           onUpdateBuilding={updateBuildingMutation.mutateAsync}
           onDeleteBuilding={async (args) => {
             await deleteBuildingMutation.mutateAsync(args);
-            navigate(`/projects/${id}`);
+            navigate(`/projects/${project.slug}`);
           }}
           canDelete={buildings.length > 1}
           isDeletingBuilding={deleteBuildingMutation.isPending}
