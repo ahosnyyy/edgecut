@@ -35,6 +35,7 @@ import {
   Search01Icon,
   FilterIcon,
   SaveIcon,
+  AlertCircleIcon,
 } from "@hugeicons/core-free-icons";
 import { useSettings } from "../hooks/useSettings";
 
@@ -268,30 +269,38 @@ export default function StockCatalog() {
                               defaultValue={10}
                               className="w-12 h-5 px-1 text-[10px] text-center rounded border bg-background"
                               onClick={(e) => e.stopPropagation()}
-                              onKeyDown={(e) => {
+                              onKeyDown={async (e) => {
                                 if (e.key === "Enter") {
                                   const val = parseInt((e.target as HTMLInputElement).value, 10);
                                   if (!isNaN(val) && val !== 0) {
-                                    updateMutation.mutate({
-                                      id: entry.id,
-                                      data: { quantity: Math.max(0, entry.quantity + val) },
-                                    });
-                                    (e.target as HTMLInputElement).value = "10";
+                                    try {
+                                      await updateMutation.mutateAsync({
+                                        id: entry.id,
+                                        data: { quantity: Math.max(0, entry.quantity + val) },
+                                      });
+                                      (e.target as HTMLInputElement).value = "10";
+                                    } catch (err: any) {
+                                      alert(err?.message ?? "Failed to update quantity");
+                                    }
                                   }
                                 }
                               }}
                             />
                             <button
                               className="flex items-center justify-center h-5 w-5 rounded border bg-background hover:bg-accent transition-colors"
-                              onClick={(e) => {
+                              onClick={async (e) => {
                                 const input = (e.currentTarget.previousSibling as HTMLInputElement);
                                 const val = parseInt(input.value, 10);
                                 if (!isNaN(val) && val !== 0) {
-                                  updateMutation.mutate({
-                                    id: entry.id,
-                                    data: { quantity: Math.max(0, entry.quantity + val) },
-                                  });
-                                  input.value = "10";
+                                  try {
+                                    await updateMutation.mutateAsync({
+                                      id: entry.id,
+                                      data: { quantity: Math.max(0, entry.quantity + val) },
+                                    });
+                                    input.value = "10";
+                                  } catch (err: any) {
+                                    alert(err?.message ?? "Failed to update quantity");
+                                  }
                                 }
                               }}
                             >
@@ -340,7 +349,7 @@ function StockCatalogDialog({
 }: {
   entry: StockCatalogEntry | null;
   onClose: () => void;
-  onSave: (data: Omit<StockCatalogEntry, "id" | "reservedQty" | "usedQty">) => void;
+  onSave: (data: Omit<StockCatalogEntry, "id" | "reservedQty" | "usedQty">) => Promise<void>;
   isSaving: boolean;
 }) {
   const { fromMM: convertFromMM, toMM: convertToMM, unitLabel } = useSettings();
@@ -351,16 +360,22 @@ function StockCatalogDialog({
   const [label, setLabel] = useState(entry?.label ?? "");
   const [length, setLength] = useState(entry?.length ? convertFromMM(entry.length) : 60);
   const [quantity, setQuantity] = useState(entry?.quantity ?? -1);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
-  const handleSave = () => {
-    onSave({
-      profileSystem,
-      profileType: profileType || "frame",
-      color: "#000000",
-      length: convertToMM(length),
-      quantity,
-      label: label.trim() || null,
-    });
+  const handleSave = async () => {
+    setSaveError(null);
+    try {
+      await onSave({
+        profileSystem,
+        profileType: profileType || "frame",
+        color: "#000000",
+        length: convertToMM(length),
+        quantity,
+        label: label.trim() || null,
+      });
+    } catch (err: any) {
+      setSaveError(err?.message ?? "Failed to save");
+    }
   };
 
   return (
@@ -444,6 +459,12 @@ function StockCatalogDialog({
             </div>
           </div>
         </div>
+        {saveError && (
+          <div className="flex items-start gap-2 text-sm text-destructive">
+            <HugeiconsIcon icon={AlertCircleIcon} size={16} className="shrink-0 mt-0.5" />
+            <span>{saveError}</span>
+          </div>
+        )}
         <DialogFooter>
           <SaveButton
             onClick={handleSave}

@@ -73,15 +73,28 @@ stockCatalogRoutes.put("/:id", async (c) => {
     label?: string;
   }>();
 
+  const updates: Record<string, unknown> = {
+    profileType: body.profileType ?? existing[0].profileType,
+    color: body.color ?? existing[0].color,
+    length: body.length ?? existing[0].length,
+    label: body.label !== undefined ? body.label : existing[0].label,
+  };
+
+  if (body.quantity !== undefined) {
+    if (body.quantity !== -1 && body.quantity < existing[0].reservedQty) {
+      return c.json({
+        error: `Cannot reduce quantity to ${body.quantity}: ${existing[0].reservedQty} bars are already reserved by projects. Reduce project stock first.`,
+      }, 400);
+    }
+    updates.quantity = body.quantity;
+    if (body.quantity === -1) {
+      updates.reservedQty = 0;
+    }
+  }
+
   await db
     .update(stockCatalog)
-    .set({
-      profileType: body.profileType ?? existing[0].profileType,
-      color: body.color ?? existing[0].color,
-      length: body.length ?? existing[0].length,
-      quantity: body.quantity ?? existing[0].quantity,
-      label: body.label !== undefined ? body.label : existing[0].label,
-    })
+    .set(updates)
     .where(eq(stockCatalog.id, id));
 
   return c.json({ id, updated: true });
