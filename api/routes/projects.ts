@@ -526,17 +526,19 @@ projectRoutes.put("/:id/buildings/:buildingId/opening-sizes", async (c) => {
     .delete(projectOpeningSizes)
     .where(eq(projectOpeningSizes.buildingId, buildingId));
 
-  for (const s of body.sizes) {
-    await db.insert(projectOpeningSizes).values({
-      id: generateId(),
-      projectId: id,
-      buildingId,
-      apartmentTemplateOpeningId: s.apartmentTemplateOpeningId,
-      floor: s.floor,
-      apartmentIndex: s.apartmentIndex,
-      width: s.width,
-      height: s.height,
-    });
+  if (body.sizes.length > 0) {
+    await db.insert(projectOpeningSizes).values(
+      body.sizes.map((s) => ({
+        id: generateId(),
+        projectId: id,
+        buildingId,
+        apartmentTemplateOpeningId: s.apartmentTemplateOpeningId,
+        floor: s.floor,
+        apartmentIndex: s.apartmentIndex,
+        width: s.width,
+        height: s.height,
+      })),
+    );
   }
 
   return c.json({ saved: true });

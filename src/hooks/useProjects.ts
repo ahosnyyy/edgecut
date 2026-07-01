@@ -261,7 +261,26 @@ export function useSaveOpeningSizes() {
         body: JSON.stringify({ sizes }),
       }),
     onSuccess: (_data, vars) => {
-      qc.invalidateQueries({ queryKey: ["project", vars.projectId] });
+      qc.setQueryData(["project", vars.projectId], (old: any) => {
+        if (!old) return old;
+        const otherSizes = (old.openingSizes ?? []).filter(
+          (s: any) => s.buildingId !== vars.buildingId,
+        );
+        return {
+          ...old,
+          openingSizes: [
+            ...otherSizes,
+            ...vars.sizes.map((s) => ({
+              apartmentTemplateOpeningId: s.apartmentTemplateOpeningId,
+              buildingId: vars.buildingId,
+              floor: s.floor,
+              apartmentIndex: s.apartmentIndex,
+              width: s.width,
+              height: s.height,
+            })),
+          ],
+        };
+      });
     },
   });
 }
