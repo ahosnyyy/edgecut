@@ -10,7 +10,7 @@ import { Button } from "./ui/button";
 import { Checkbox } from "./ui/checkbox";
 import { Badge } from "./ui/badge";
 import { HugeiconsIcon } from "@hugeicons/react";
-import { Pdf01Icon } from "@hugeicons/core-free-icons";
+import { Pdf01Icon, ArrowUp01Icon, ArrowDown01Icon } from "@hugeicons/core-free-icons";
 import type { CuttingPlan } from "../hooks/useCuttingPlans";
 import type { PiecePoolGroupData } from "../hooks/usePiecePools";
 import { generateExportPDF, type PlanSectionData } from "../utils/exportPDF";
@@ -45,14 +45,16 @@ export default function ExportAllDialog({
   const [selectedPlanIds, setSelectedPlanIds] = useState<Set<string>>(
     () => new Set(savedPlans.map((p) => p.id)),
   );
+  const [planOrder, setPlanOrder] = useState<string[]>(() => savedPlans.map((p) => p.id));
   const [includePiecePools, setIncludePiecePools] = useState(true);
   const [includeMiniPiecePools, setIncludeMiniPiecePools] = useState(true);
   const [isExporting, setIsExporting] = useState(false);
 
-  // Reset selection when dialog opens
+  // Reset selection and order when dialog opens
   useEffect(() => {
     if (open) {
       setSelectedPlanIds(new Set(savedPlans.map((p) => p.id)));
+      setPlanOrder(savedPlans.map((p) => p.id));
     }
   }, [open, savedPlans]);
 
@@ -68,12 +70,26 @@ export default function ExportAllDialog({
     });
   };
 
+  const movePlan = (planId: string, direction: "up" | "down") => {
+    setPlanOrder((prev) => {
+      const idx = prev.indexOf(planId);
+      if (idx < 0) return prev;
+      const newIdx = direction === "up" ? idx - 1 : idx + 1;
+      if (newIdx < 0 || newIdx >= prev.length) return prev;
+      const next = [...prev];
+      [next[idx], next[newIdx]] = [next[newIdx], next[idx]];
+      return next;
+    });
+  };
+
   const handleExport = async () => {
     setIsExporting(true);
     try {
-      const selectedPlans = savedPlans.filter((p) => selectedPlanIds.has(p.id));
+      const orderedPlans = planOrder
+        .map((id) => savedPlans.find((p) => p.id === id))
+        .filter((p): p is CuttingPlan => !!p && selectedPlanIds.has(p.id));
 
-      const planSections: PlanSectionData[] = selectedPlans.map((plan) => {
+      const planSections: PlanSectionData[] = orderedPlans.map((plan) => {
         const bars = JSON.parse(plan.bars);
         const summary = JSON.parse(plan.summary);
         return {
@@ -124,19 +140,41 @@ export default function ExportAllDialog({
               <p className="text-xs text-muted-foreground">No saved plans found for this building.</p>
             ) : (
               <div className="flex flex-col gap-1.5">
-                {savedPlans.map((plan) => {
+                {planOrder.map((planId, idx) => {
+                  const plan = savedPlans.find((p) => p.id === planId);
+                  if (!plan) return null;
                   const summary = JSON.parse(plan.summary);
                   const checked = selectedPlanIds.has(plan.id);
                   return (
-                    <label
+                    <div
                       key={plan.id}
-                      className="flex items-center gap-2.5 px-3 py-2 rounded-md border border-border/60 cursor-pointer hover:bg-muted/50 transition-colors"
+                      className="flex items-center gap-2.5 px-3 py-2 rounded-md border border-border/60 hover:bg-muted/50 transition-colors"
                     >
+                      <div className="flex flex-col gap-0.5">
+                        <button
+                          type="button"
+                          onClick={() => movePlan(plan.id, "up")}
+                          disabled={idx === 0}
+                          className="text-muted-foreground hover:text-foreground disabled:opacity-30 disabled:cursor-not-allowed"
+                        >
+                          <HugeiconsIcon icon={ArrowUp01Icon} size={12} />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => movePlan(plan.id, "down")}
+                          disabled={idx === planOrder.length - 1}
+                          className="text-muted-foreground hover:text-foreground disabled:opacity-30 disabled:cursor-not-allowed"
+                        >
+                          <HugeiconsIcon icon={ArrowDown01Icon} size={12} />
+                        </button>
+                      </div>
                       <Checkbox
                         checked={checked}
                         onCheckedChange={() => togglePlan(plan.id)}
                       />
-                      <span className="text-sm flex-1">{profileTypeLabel(plan.profileType)}</span>
+                      <span className="text-sm flex-1 cursor-pointer" onClick={() => togglePlan(plan.id)}>
+                        {profileTypeLabel(plan.profileType)}
+                      </span>
                       <Badge
                         variant="secondary"
                         className={
@@ -151,7 +189,7 @@ export default function ExportAllDialog({
                       <span className="text-[10px] text-muted-foreground whitespace-nowrap">
                         {summary.totalBars} bars · {summary.totalWastePercent?.toFixed(1)}%
                       </span>
-                    </label>
+                    </div>
                   );
                 })}
               </div>
