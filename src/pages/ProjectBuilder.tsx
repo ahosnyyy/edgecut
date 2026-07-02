@@ -1174,10 +1174,11 @@ function ProjectSettings({
 // ─── Building Detail View ─────────────────────────────────────────────────────
 
 export function BuildingDetail({
-  building, projectId, aptTemplates, projectProfileSystems, existingAssignments, existingSizes, aptTemplateNames, onNext, onPrev, hasNext, hasPrev, onUpdateBuilding, onDeleteBuilding, canDelete, isDeletingBuilding,
+  building, projectId, projectName, aptTemplates, projectProfileSystems, existingAssignments, existingSizes, aptTemplateNames, onNext, onPrev, hasNext, hasPrev, onUpdateBuilding, onDeleteBuilding, canDelete, isDeletingBuilding,
 }: {
   building: BuildingLike;
   projectId: string;
+  projectName: string;
   aptTemplates: { id: string; name: string; profileSystemKeys?: string | null }[];
   projectProfileSystems: string[];
   existingAssignments: { floor: number; apartmentIndex: number; apartmentTemplateId: string | null }[];
@@ -1271,6 +1272,7 @@ export function BuildingDetail({
         <TabsContent value="optimization" className="mt-3">
           <OptimizationTab
             projectId={projectId}
+            projectName={projectName}
             building={building}
             existingAssignments={existingAssignments}
             existingSizes={existingSizes}

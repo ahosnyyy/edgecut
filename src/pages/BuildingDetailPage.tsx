@@ -61,6 +61,7 @@ export default function BuildingDetailPage() {
         <BuildingDetail
           building={building as BuildingLike}
           projectId={id!}
+          projectName={project.name}
           aptTemplates={aptTemplates ?? []}
           projectProfileSystems={project.profileSystem ?? []}
           existingAssignments={project.assignments.filter((a) => a.buildingId === building.id)}

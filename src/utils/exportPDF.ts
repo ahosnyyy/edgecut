@@ -59,20 +59,45 @@ function ensureSpace(pdf: any, currentY: number, needed: number): number {
   return currentY;
 }
 
-function drawHeader(pdf: any, title: string, subtitle: string) {
+function drawHeader(pdf: any, title: string, subtitle: string, logos?: { edge?: string; bunyan?: string }) {
   const { width } = getPageDimensions(pdf);
-  pdf.setFillColor(24, 24, 27);
-  pdf.rect(0, 0, width, HEADER_HEIGHT, "F");
-  pdf.setFontSize(22);
-  pdf.setTextColor(255, 255, 255);
-  pdf.text("Edgecut", PAGE_MARGIN, 18);
-  pdf.setFontSize(11);
+  const centerX = width / 2;
+
+  // Edge logo — top left
+  if (logos?.edge) {
+    try {
+      pdf.addImage(logos.edge, "PNG", PAGE_MARGIN, 8, 45, 13);
+    } catch (_e) { /* optional */ }
+  }
+
+  // Bunyan logo — top right
+  if (logos?.bunyan) {
+    try {
+      pdf.addImage(logos.bunyan, "PNG", width - PAGE_MARGIN - 35, 8, 35, 12);
+    } catch (_e) { /* optional */ }
+  }
+
+  // Centered title block
+  pdf.setFont("helvetica", "bold");
+  pdf.setFontSize(13);
+  pdf.setTextColor(9, 9, 11);
+  pdf.text(title, centerX, 14, { align: "center" });
+
+  if (subtitle) {
+    pdf.setFont("helvetica", "normal");
+    pdf.setFontSize(9);
+    pdf.setTextColor(113, 113, 122);
+    pdf.text(subtitle, centerX, 22, { align: "center" });
+  }
+
+  pdf.setFontSize(8);
   pdf.setTextColor(161, 161, 170);
-  pdf.text(subtitle, PAGE_MARGIN, 26);
-  pdf.setFontSize(10);
-  pdf.setTextColor(200, 200, 200);
-  pdf.text(title, width - PAGE_MARGIN, 18, { align: "right" });
-  pdf.text(`Date: ${new Date().toLocaleDateString()}`, width - PAGE_MARGIN, 26, { align: "right" });
+  pdf.text(new Date().toLocaleDateString(), centerX, 29, { align: "center" });
+
+  // Header bottom border
+  pdf.setDrawColor(228, 228, 231);
+  pdf.setLineWidth(0.5);
+  pdf.line(PAGE_MARGIN, HEADER_HEIGHT - 2, width - PAGE_MARGIN, HEADER_HEIGHT - 2);
 }
 
 function addPageFooters(pdf: any) {
@@ -92,9 +117,14 @@ function drawCoverPage(
   buildingName: string,
   plans: PlanSectionData[],
   includePiecePools: boolean,
+  logos?: { edge?: string; bunyan?: string },
+  piecePoolGroups?: PiecePoolGroupData[],
 ) {
   const { width } = getPageDimensions(pdf);
-  drawHeader(pdf, `${projectName} — ${buildingName}`, "Optimized Cutting Plan");
+  const subtitle = piecePoolGroups && piecePoolGroups.length > 0
+    ? piecePoolGroups.map((g) => g.group.pieceTemplateName).join(", ")
+    : "";
+  drawHeader(pdf, `${projectName} — ${buildingName}`, subtitle, logos);
 
   let y = HEADER_HEIGHT + 15;
 
@@ -583,8 +613,8 @@ function drawPiecePoolTable(
     const sg = sizeGroups[si];
     const pieces = piecesBySize[si]?.pieces ?? [];
 
-    // Calculate dynamic row height based on location count (3 per line)
-    const locsPerLine = 3;
+    // Calculate dynamic row height based on location count (4 per line)
+    const locsPerLine = 4;
     const locLines = Math.max(1, Math.ceil(sg.locations.length / locsPerLine));
     const valueRowHeight = Math.max(rowHeight, locLines * 5 + 2);
 
@@ -602,7 +632,7 @@ function drawPiecePoolTable(
     // Qty (vertically centered)
     pdf.text(String(sg.count), colXs[1] + allColWidths[1] / 2, y + valueRowHeight / 2, { align: "center" });
 
-    // Locations — wrapped in a grid (3 per line) like the web page
+    // Locations — wrapped in a grid (4 per line) like the web page
     const locColWidth = allColWidths[2] / locsPerLine;
     for (let li = 0; li < sg.locations.length; li++) {
       const lineIdx = Math.floor(li / locsPerLine);
@@ -655,10 +685,35 @@ export async function generateExportPDF(opts: ExportPDFOptions): Promise<any> {
   const { default: jsPDF } = await import("jspdf");
   const pdf = new jsPDF("l", "mm", "a4"); // landscape
 
+  // Fetch logos at runtime from public directory
+  const logos: { edge?: string; bunyan?: string } = {};
+  try {
+    const edgeResp = await fetch("/edge.png");
+    if (edgeResp.ok) {
+      const blob = await edgeResp.blob();
+      logos.edge = await new Promise<string>((resolve) => {
+        const reader = new FileReader();
+        reader.onloadend = () => resolve(reader.result as string);
+        reader.readAsDataURL(blob);
+      });
+    }
+  } catch (_e) { /* optional */ }
+  try {
+    const bunyanResp = await fetch("/bunyan.png");
+    if (bunyanResp.ok) {
+      const blob = await bunyanResp.blob();
+      logos.bunyan = await new Promise<string>((resolve) => {
+        const reader = new FileReader();
+        reader.onloadend = () => resolve(reader.result as string);
+        reader.readAsDataURL(blob);
+      });
+    }
+  } catch (_e) { /* optional */ }
+
   const includePiecePools = (opts.piecePoolGroups?.length ?? 0) > 0;
 
   // Cover page
-  drawCoverPage(pdf, opts.projectName, opts.buildingName, opts.plans, includePiecePools);
+  drawCoverPage(pdf, opts.projectName, opts.buildingName, opts.plans, includePiecePools, logos, opts.piecePoolGroups);
 
   // Piece pools section (before plan sections)
   if (includePiecePools && opts.piecePoolGroups) {

@@ -57,6 +57,7 @@ function useProfileTypeLabel() {
 
 export function OptimizationTab({
   projectId,
+  projectName,
   building,
   existingAssignments,
   existingSizes,
@@ -67,6 +68,7 @@ export function OptimizationTab({
   hasNext,
 }: {
   projectId: string;
+  projectName: string;
   building: BuildingLike;
   existingAssignments: { floor: number; apartmentIndex: number; apartmentTemplateId: string | null }[];
   existingSizes: { apartmentTemplateOpeningId: string; floor: number; apartmentIndex: number; width: number; height: number }[];
@@ -883,7 +885,7 @@ export function OptimizationTab({
       <ExportAllDialog
         open={showExportDialog}
         onClose={() => setShowExportDialog(false)}
-        projectName={projectId}
+        projectName={projectName}
         buildingName={building.name}
         savedPlans={savedPlans ?? []}
         piecePoolGroups={piecePoolGroups}
