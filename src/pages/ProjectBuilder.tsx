@@ -2759,6 +2759,27 @@ function PiecePools({
                       </TableRow>
                     </Fragment>
                   ))}
+                  <TableRow className="border-t-2 border-border font-semibold">
+                    <TableCell className="text-xs font-bold py-2 text-foreground">
+                      Total
+                    </TableCell>
+                    <TableCell className="py-2 px-4 text-center">
+                      <span className="text-xs font-bold">{activeData.sizeGroups.reduce((sum, g) => sum + g.count, 0)}</span>
+                    </TableCell>
+                    <TableCell className="py-2 px-4" />
+                    <TableCell className="py-2 px-4" />
+                    <TableCell className="py-2 px-4" />
+                    {piecesBySize?.[0]?.pieces.map((_, pi) => (
+                      <TableCell key={pi} className="py-2 px-4 text-center">
+                        <span className="text-xs font-bold font-mono">
+                          {activeData.sizeGroups.reduce((sum, g, si) => {
+                            const pieces = piecesBySize?.[si]?.pieces ?? [];
+                            return sum + (pieces[pi] ? g.count * pieces[pi].quantity : 0);
+                          }, 0)}
+                        </span>
+                      </TableCell>
+                    ))}
+                  </TableRow>
                 </TableBody>
               </Table>
             </div>

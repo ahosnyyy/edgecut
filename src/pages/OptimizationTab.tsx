@@ -38,8 +38,11 @@ import {
   ScissorIcon,
   CheckmarkCircle01Icon,
   Delete02Icon,
+  FileDownloadIcon,
 } from "@hugeicons/core-free-icons";
 import type { BuildingLike } from "./ProjectBuilder";
+import { usePiecePools } from "../hooks/usePiecePools";
+import ExportAllDialog from "../components/ExportAllDialog";
 
 interface SizeGrid {
   [key: string]: { width: string; height: string };
@@ -73,15 +76,37 @@ export function OptimizationTab({
   hasPrev?: boolean;
   hasNext?: boolean;
 }) {
-  const { fromMM: convertFromMM, toMM: convertToMM, formatLength, kerfWidth, optimizationStrategy } = useSettings();
+  const { fromMM: convertFromMM, toMM: convertToMM, formatLength, kerfWidth, optimizationStrategy, displayUnit, unitLabel } = useSettings();
   const profileTypeLabel = useProfileTypeLabel();
-  const { dispatch, state } = useApp();
+  const { dispatch, state, getRGBForLength } = useApp();
   const { data: stockEntries } = useProjectStock(projectId);
+
+  const [showExportDialog, setShowExportDialog] = useState(false);
+
+  // Build stock lookup from all project stock entries (covers all profile types)
+  const stockLookup = useMemo(() => {
+    const map = new Map<string, { label: string; length: number }>();
+    for (const s of stockEntries ?? []) {
+      map.set(s.id, { label: s.label ?? s.id, length: s.length ?? 0 });
+    }
+    return map;
+  }, [stockEntries]);
 
   const floors = building.floors;
   const apartmentsPerFloor = building.apartmentsPerFloor;
   let floorLabels: string[] = [];
   try { floorLabels = JSON.parse(building.floorLabels); } catch { floorLabels = []; }
+
+  // Compute piece pool data for export
+  const { groupData: piecePoolGroups } = usePiecePools({
+    existingAssignments,
+    existingSizes,
+    floors: building.floors,
+    apartmentsPerFloor: building.apartmentsPerFloor,
+    floorLabels,
+    convertFromMM,
+    convertToMM,
+  });
 
   // Build sizes map
   const sizes = useMemo(() => {
@@ -705,6 +730,16 @@ export function OptimizationTab({
               />
               {isOptimizing ? "Working..." : "Optimize"}
             </Button>
+            {savedPlans && savedPlans.length > 0 && (
+              <Button
+                variant="outline"
+                onClick={() => setShowExportDialog(true)}
+                title="Export all saved plans as PDF"
+              >
+                <HugeiconsIcon icon={FileDownloadIcon} size={14} className="mr-1.5" />
+                Export All
+              </Button>
+            )}
           </div>
         </div>
       )}
@@ -844,6 +879,20 @@ export function OptimizationTab({
           </CardContent>
         </Card>
       )}
+
+      <ExportAllDialog
+        open={showExportDialog}
+        onClose={() => setShowExportDialog(false)}
+        projectName={projectId}
+        buildingName={building.name}
+        savedPlans={savedPlans ?? []}
+        piecePoolGroups={piecePoolGroups}
+        unit={displayUnit}
+        unitLabel={unitLabel}
+        getRGBForLength={getRGBForLength}
+        getStockById={(id) => stockLookup.get(id) ?? null}
+        profileTypeLabel={profileTypeLabel}
+      />
     </div>
   );
 }
