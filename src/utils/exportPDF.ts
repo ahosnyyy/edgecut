@@ -151,6 +151,170 @@ function drawCoverPage(
 }
 
 /**
+ * Draws a mini piece pool table for a specific profile type, filtered from the full group data.
+ * Shows only pieces belonging to the given profileType.
+ */
+function drawMiniPiecePoolTable(
+  pdf: any,
+  groups: PiecePoolGroupData[],
+  profileType: string,
+  opts: ExportPDFOptions,
+  colX: number,
+  colWidth: number,
+  startY: number,
+  pageHeight: number,
+): { y: number; rows: { sizeNum: number; count: number; avgW: string; avgH: string; locations: string[]; pieces: { label: string; length: number; quantity: number }[] }[] } {
+  const bottomLimit = pageHeight - PAGE_MARGIN;
+  let y = startY;
+
+  // Collect all pieces for this profile type across all groups
+  const rows: { sizeNum: number; count: number; avgW: string; avgH: string; locations: string[]; pieces: { label: string; length: number; quantity: number }[] }[] = [];
+
+  for (const group of groups) {
+    // Find the piece group matching this profile type
+    const pg = group.pieceGroups.find((g) => g.profileType === profileType);
+    if (!pg) continue;
+
+    for (let si = 0; si < group.sizeGroups.length; si++) {
+      const sg = group.sizeGroups[si];
+      const allPieces = group.piecesBySize[si]?.pieces ?? [];
+      // Filter pieces to only those in this profile type's indices
+      const filteredPieces = pg.indices
+        .map((idx) => allPieces[idx])
+        .filter((p) => p != null)
+        .map((p) => ({ label: p.label, length: p.length, quantity: p.quantity }));
+
+      if (filteredPieces.length === 0) continue;
+
+      rows.push({
+        sizeNum: rows.length + 1,
+        count: sg.count,
+        avgW: sg.avgW,
+        avgH: sg.avgH,
+        locations: sg.locations,
+        pieces: filteredPieces,
+      });
+    }
+  }
+
+  if (rows.length === 0) return { y, rows: [] };
+
+  // Check space for header + at least one row
+  if (y + 20 > bottomLimit) return { y, rows: [] };
+
+  // Column layout — compact, with Locations as last column
+  const fixedCols = [
+    { label: "Size", w: 8 },
+    { label: "Qty", w: 7 },
+  ];
+  const fixedTotal = fixedCols.reduce((s, c) => s + c.w, 0);
+  const numPieceCols = rows[0]?.pieces.length ?? 0;
+  const pieceColW = 12;
+  const pieceTotal = numPieceCols * pieceColW;
+  const locColW = colWidth - fixedTotal - pieceTotal;
+
+  const colXs: number[] = [colX];
+  const allWidths = [...fixedCols.map((c) => c.w), locColW, ...Array(numPieceCols).fill(pieceColW)];
+  for (let i = 0; i < allWidths.length; i++) {
+    colXs.push(colXs[i] + allWidths[i]);
+  }
+
+  const locColIndex = 2; // right after Qty
+  const locsPerLine = Math.max(1, Math.floor(locColW / 11));
+  const rh = 5;
+
+  // Header row
+  pdf.setFillColor(244, 244, 245);
+  pdf.rect(colX, y, colXs[colXs.length - 1] - colX, rh, "F");
+
+  pdf.setFont("helvetica", "bold");
+  pdf.setFontSize(7);
+  pdf.setTextColor(82, 82, 91);
+
+  for (let i = 0; i < fixedCols.length; i++) {
+    pdf.text(fixedCols[i].label, colXs[i] + allWidths[i] / 2, y + rh - 1.5, { align: "center" });
+  }
+  pdf.text("Locations", colXs[locColIndex] + 1, y + rh - 1.5, { align: "left" });
+  for (let i = 0; i < numPieceCols; i++) {
+    const piece = rows[0].pieces[i];
+    pdf.text(`${piece.label}×${piece.quantity}`, colXs[3 + i] + allWidths[3 + i] / 2, y + rh - 1.5, { align: "center" });
+  }
+
+  // Header bottom border
+  pdf.setDrawColor(228, 228, 231);
+  pdf.setLineWidth(0.3);
+  pdf.line(colX, y + rh, colXs[colXs.length - 1], y + rh);
+
+  y += rh;
+
+  // Data rows — dynamic height based on location count
+  pdf.setFont("helvetica", "normal");
+  for (const row of rows) {
+    const locLines = Math.max(1, Math.ceil(row.locations.length / locsPerLine));
+    const rowH = Math.max(rh, locLines * 4.5 + 1);
+
+    if (y + rowH > bottomLimit) break;
+
+    // Row separator line (top of this row)
+    pdf.setDrawColor(228, 228, 231);
+    pdf.setLineWidth(0.2);
+    pdf.line(colX, y, colXs[colXs.length - 1], y);
+
+    const rowMidY = y + rowH / 2 + 1;
+    const rowTopY = y + 3.5;
+
+    pdf.setFontSize(6);
+    pdf.setTextColor(82, 82, 91);
+
+    pdf.text(`S${row.sizeNum}`, colXs[0] + allWidths[0] / 2, rowMidY, { align: "center" });
+    pdf.text(String(row.count), colXs[1] + allWidths[1] / 2, rowMidY, { align: "center" });
+    pdf.setFont("helvetica", "normal");
+
+    for (let pi = 0; pi < row.pieces.length; pi++) {
+      const cx = colXs[3 + pi] + allWidths[3 + pi] / 2;
+      pdf.text(formatLength(row.pieces[pi].length, opts.unit, false), cx, rowMidY, { align: "center" });
+    }
+
+    // Locations — wrapped grid within the locations column
+    const locCellW = locColW / locsPerLine;
+    for (let li = 0; li < row.locations.length; li++) {
+      const lineIdx = Math.floor(li / locsPerLine);
+      const colInLine = li % locsPerLine;
+      const lx = colXs[locColIndex] + colInLine * locCellW + locCellW / 2;
+      const ly = y + 3 + lineIdx * 4.5;
+      pdf.text(row.locations[li], lx, ly, { align: "center" });
+    }
+
+    y += rowH;
+
+    // Subtotal row (muted)
+    if (y + rh > bottomLimit) break;
+    pdf.setFillColor(250, 250, 250);
+    pdf.rect(colX, y, colXs[colXs.length - 1] - colX, rh, "F");
+
+    pdf.setFont("helvetica", "bold");
+    pdf.setFontSize(5);
+    pdf.setTextColor(161, 161, 170);
+
+    for (let pi = 0; pi < row.pieces.length; pi++) {
+      const cx = colXs[3 + pi] + allWidths[3 + pi] / 2;
+      pdf.text(`×${row.count * row.pieces[pi].quantity}`, cx, y + rh / 2 + 1, { align: "center" });
+    }
+
+    pdf.setFont("helvetica", "normal");
+    pdf.setFontSize(6);
+    y += rh;
+  }
+
+  // Bottom border after last row
+  pdf.line(colX, y, colXs[colXs.length - 1], y);
+
+  pdf.setFont("helvetica", "normal");
+  y += 6;
+  return { y, rows };
+}
+
+/**
  * Draws a full plan section (title + materials + bars) within a column.
  * Returns the Y position after drawing, or null if it overflowed (caller should continue on next page/column).
  */
@@ -166,7 +330,7 @@ function drawPlanSectionInColumn(
   let y = startY;
   const bottomLimit = pageHeight - PAGE_MARGIN;
   const barHeight = 6;
-  const barEntryHeight = 10; // bar (6) + spacing (4)
+  const barEntryHeight = 8; // bar (6) + spacing (2)
 
   // Section header — one line: TYPE [Status] · 58× Frame Bar (600cm) · 7.0% waste
   if (y + 16 > bottomLimit) return { endedY: y, overflowed: true };
@@ -207,9 +371,15 @@ function drawPlanSectionInColumn(
   const infoText = `${materialsStr} · ${plan.summary.totalWastePercent.toFixed(1)}% waste`;
   pdf.text(infoText, colX, y + 10);
 
-  y += 18;
+  y += 16;
 
-  // Cutting Instructions
+  // Mini piece pool table for this profile type
+  let poolRows: { sizeNum: number; count: number; avgW: string; avgH: string; locations: string[]; pieces: { label: string; length: number; quantity: number }[] }[] = [];
+  if (opts.piecePoolGroups && opts.piecePoolGroups.length > 0) {
+    const poolResult = drawMiniPiecePoolTable(pdf, opts.piecePoolGroups, plan.profileType, opts, colX, colWidth, y, pageHeight);
+    y = poolResult.y;
+    poolRows = poolResult.rows;
+  }
 
   const barsToPrint = groupBars(plan.bars);
   barsToPrint.sort((a: any, b: any) => b.count - a.count);
@@ -297,7 +467,7 @@ function drawPlanSectionInColumn(
     }
 
     pdf.setFont("helvetica", "normal");
-    y += barHeight + 4;
+    y += barHeight + 2;
   }
 
   return { endedY: y, overflowed: false };
@@ -476,34 +646,8 @@ function drawPiecePoolTable(
     y += rowHeight;
   }
 
-  // ── Grand total row ──
-  y = ensureSpace(pdf, y, rowHeight + 4);
-  pdf.setDrawColor(113, 113, 122);
-  pdf.setLineWidth(0.5);
-  pdf.line(PAGE_MARGIN, y, colXs[colXs.length - 1], y);
-  y += 3;
-
-  pdf.setFont("helvetica", "bold");
-  pdf.setFontSize(7);
-  pdf.setTextColor(9, 9, 11);
-  pdf.text("Total", colXs[0] + 1, y + rowHeight - 1.5, { align: "left" });
-
-  const totalCount = sizeGroups.reduce((sum, sg) => sum + sg.count, 0);
-  pdf.text(String(totalCount), colXs[1] + allColWidths[1] / 2, y + rowHeight - 1.5, { align: "center" });
-
-  // Grand total per piece
-  for (let pi = 0; pi < firstPieces.length; pi++) {
-    const col = 5 + pi;
-    const cx = colXs[col] + allColWidths[col] / 2;
-    const total = sizeGroups.reduce((sum, sg, si) => {
-      const pieces = piecesBySize[si]?.pieces ?? [];
-      return sum + (pieces[pi] ? sg.count * pieces[pi].quantity : 0);
-    }, 0);
-    pdf.text(`×${total}`, cx, y + rowHeight - 1.5, { align: "center" });
-  }
-
   pdf.setFont("helvetica", "normal");
-  y += rowHeight + 8;
+  y += 8;
   return y;
 }
 

@@ -2539,9 +2539,7 @@ function PiecePools({
       const sizeGroups = Array.from(sizeKeyMap.values()).map((g) => ({
         avgW: String(g.w),
         avgH: String(g.h),
-        locations: Array.from(g.locations.entries()).map(([loc, n]) =>
-          n > 1 ? `${loc}×${n}` : loc
-        ),
+        locations: Array.from(g.locations.entries()).map(([loc, n]) => `${n}×${loc}`),
         count: g.count,
       }));
 
@@ -2720,12 +2718,14 @@ function PiecePools({
                           <span className="text-xs">{group.count}</span>
                         </TableCell>
                         <TableCell className="py-3 px-4 text-center">
-                          <div className="grid grid-cols-3 gap-0.5 w-fit mx-auto">
+                          <div className="grid grid-cols-4 gap-0.5 w-fit mx-auto">
                             {group.locations.map((loc, i) => {
-                              const m = loc.match(/^(.+)×(\d+)$/);
+                              const m = loc.match(/^(\d+)×(.+)$/);
+                              const count = m ? m[1] : "1";
+                              const label = m ? m[2] : loc;
                               return (
                                 <span key={i} className="text-xs text-muted-foreground text-center leading-tight py-0.5 px-0.5 rounded border border-border/60 w-12">
-                                  {m ? <>{m[1]}<span className="text-[10px]"> ×{m[2]}</span></> : loc}
+                                  <span className="text-[10px]">{count}×</span>{label}
                                 </span>
                               );
                             })}
@@ -2759,27 +2759,6 @@ function PiecePools({
                       </TableRow>
                     </Fragment>
                   ))}
-                  <TableRow className="border-t-2 border-border font-semibold">
-                    <TableCell className="text-xs font-bold py-2 text-foreground">
-                      Total
-                    </TableCell>
-                    <TableCell className="py-2 px-4 text-center">
-                      <span className="text-xs font-bold">{activeData.sizeGroups.reduce((sum, g) => sum + g.count, 0)}</span>
-                    </TableCell>
-                    <TableCell className="py-2 px-4" />
-                    <TableCell className="py-2 px-4" />
-                    <TableCell className="py-2 px-4" />
-                    {piecesBySize?.[0]?.pieces.map((_, pi) => (
-                      <TableCell key={pi} className="py-2 px-4 text-center">
-                        <span className="text-xs font-bold font-mono">
-                          {activeData.sizeGroups.reduce((sum, g, si) => {
-                            const pieces = piecesBySize?.[si]?.pieces ?? [];
-                            return sum + (pieces[pi] ? g.count * pieces[pi].quantity : 0);
-                          }, 0)}
-                        </span>
-                      </TableCell>
-                    ))}
-                  </TableRow>
                 </TableBody>
               </Table>
             </div>

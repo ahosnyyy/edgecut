@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Generator: Adobe Illustrator 25.4.1, SVG Export Plug-In . SVG Version: 6.00 Build 0)  -->
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd" [
+	<!ENTITY ns_extend "http://ns.adobe.com/Extensibility/1.0/">
+	<!ENTITY ns_ai "http://ns.adobe.com/AdobeIllustrator/10.0/">
+	<!ENTITY ns_graphs "http://ns.adobe.com/Graphs/1.0/">
+	<!ENTITY ns_vars "http://ns.adobe.com/Variables/1.0/">
+	<!ENTITY ns_imrep "http://ns.adobe.com/ImageReplacement/1.0/">
+	<!ENTITY ns_sfw "http://ns.adobe.com/SaveForWeb/1.0/">
+	<!ENTITY ns_custom "http://ns.adobe.com/GenericCustomNamespace/1.0/">
+	<!ENTITY ns_adobe_xpath "http://ns.adobe.com/XPath/1.0/">
+]>
+<svg version="1.1" id="Layer_1" xmlns:x="&ns_extend;" xmlns:i="&ns_ai;" xmlns:graph="&ns_graphs;"
+	 xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" x="0px" y="0px" viewBox="0 0 720 218"
+	 style="enable-background:new 0 0 720 218;" xml:space="preserve">
+<style type="text/css">
+	.st0{fill:#F5333F;}
+	.st1{fill:#24272A;}
+	.st2{font-family:'EurostileExtended-Roman';}
+	.st3{font-size:40.0863px;}
+</style>
+<metadata>
+	<sfw  xmlns="&ns_sfw;">
+		<slices></slices>
+		<sliceSourceBounds  bottomLeftOrigin="true" height="217.7" width="720" x="0" y="-217.9"></sliceSourceBounds>
+	</sfw>
+</metadata>
+<g>
+	<g>
+		<g>
+			<g>
+				<g>
+					<path class="st0" d="M676.9,16.2v-12h-7.2v-4h19.2v4h-7.1v12H676.9z"/>
+					<path class="st0" d="M715.4,16.2V3.9l-7.1,12.2h-3.9l-7-12.2v12.2h-4.6v-16h7.4l6.1,10.7l6.2-10.7h7.5v16H715.4z"/>
+				</g>
+			</g>
+			<g>
+				<g>
+					<g>
+						<g>
+							<polygon class="st0" points="40,40.2 40,50.7 156.2,50.7 156.2,90.8 40,90.8 40,101.4 156.2,101.4 156.2,141.4 0,141.4 
+								0,0.1 156.2,0.1 156.2,40.2 							"/>
+						</g>
+					</g>
+					<g>
+						<g>
+							<polygon class="st0" points="543.4,40.2 543.4,50.7 659.5,50.7 659.5,90.8 543.4,90.8 543.4,101.4 659.5,101.4 659.5,141.4 
+								503.4,141.4 503.4,0.1 659.5,0.1 659.5,40.2 							"/>
+						</g>
+					</g>
+					<path class="st0" d="M324,70.8c0,39-31.9,70.6-71.1,70.6h-84.4V40.2h40v61.2h44.3c17.1,0,31-14.6,31-30.6
+						c0-16-13.9-30.6-31-30.6h-44.3v-40h44.3C292.1,0.1,324,31.8,324,70.8z"/>
+					<g>
+						<g>
+							<path class="st0" d="M376.8,70.8c0,16,13.9,30.6,31,30.6h83.8v40h-83.8c-39.2,0-71.1-31.7-71.1-70.6
+								c0-38.9,31.9-70.6,71.1-70.6h83.8v40h-83.8C390.8,40.2,376.8,54.7,376.8,70.8z"/>
+							<polygon class="st0" points="491.7,61.3 491.7,101.4 420,90.8 420,50.7 							"/>
+						</g>
+					</g>
+				</g>
+			</g>
+		</g>
+	</g>
+	<g>
+		<text transform="matrix(1 0 0 1 -1.704637e-04 208.9316)" class="st1 st2 st3">Interior Solutions</text>
+	</g>
+</g>
+</svg>

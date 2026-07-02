@@ -222,7 +222,7 @@ export function usePiecePools(input: PiecePoolsInput): {
       const sizeGroups: SizeGroup[] = Array.from(sizeKeyMap.values()).map((g) => ({
         avgW: String(g.w),
         avgH: String(g.h),
-        locations: Array.from(g.locations.entries()).map(([loc, n]) => (n > 1 ? `${loc}×${n}` : loc)),
+        locations: Array.from(g.locations.entries()).map(([loc, n]) => `${n}×${loc}`),
         count: g.count,
       }));
 
