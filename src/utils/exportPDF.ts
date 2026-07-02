@@ -41,7 +41,7 @@ function groupBars(bars: any[]): any[] {
 }
 
 const PAGE_MARGIN = 15;
-const HEADER_HEIGHT = 35;
+const HEADER_HEIGHT = 28;
 
 function getPageDimensions(pdf: any) {
   return {
@@ -66,14 +66,14 @@ function drawHeader(pdf: any, title: string, subtitle: string, logos?: { edge?: 
   // Edge logo — top left
   if (logos?.edge) {
     try {
-      pdf.addImage(logos.edge, "PNG", PAGE_MARGIN, 8, 45, 13);
+      pdf.addImage(logos.edge, "PNG", PAGE_MARGIN, 5, 45, 13);
     } catch (_e) { /* optional */ }
   }
 
   // Bunyan logo — top right
   if (logos?.bunyan) {
     try {
-      pdf.addImage(logos.bunyan, "PNG", width - PAGE_MARGIN - 35, 8, 35, 12);
+      pdf.addImage(logos.bunyan, "PNG", width - PAGE_MARGIN - 35, 5, 35, 12);
     } catch (_e) { /* optional */ }
   }
 
@@ -81,18 +81,14 @@ function drawHeader(pdf: any, title: string, subtitle: string, logos?: { edge?: 
   pdf.setFont("helvetica", "bold");
   pdf.setFontSize(13);
   pdf.setTextColor(9, 9, 11);
-  pdf.text(title, centerX, 14, { align: "center" });
+  pdf.text(title, centerX, 12, { align: "center" });
 
   if (subtitle) {
     pdf.setFont("helvetica", "normal");
     pdf.setFontSize(9);
     pdf.setTextColor(113, 113, 122);
-    pdf.text(subtitle, centerX, 22, { align: "center" });
+    pdf.text(subtitle, centerX, 19, { align: "center" });
   }
-
-  pdf.setFontSize(8);
-  pdf.setTextColor(161, 161, 170);
-  pdf.text(new Date().toLocaleDateString(), centerX, 29, { align: "center" });
 
   // Header bottom border
   pdf.setDrawColor(228, 228, 231);
@@ -100,14 +96,20 @@ function drawHeader(pdf: any, title: string, subtitle: string, logos?: { edge?: 
   pdf.line(PAGE_MARGIN, HEADER_HEIGHT - 2, width - PAGE_MARGIN, HEADER_HEIGHT - 2);
 }
 
-function addPageFooters(pdf: any) {
+function addPageFooters(pdf: any, title?: string, subtitle?: string) {
   const { width, height } = getPageDimensions(pdf);
   const pageCount = pdf.getNumberOfPages();
+  const dateStr = new Date().toLocaleDateString();
+  const centerText = [title, subtitle].filter(Boolean).join("  ·  ");
   for (let i = 1; i <= pageCount; i++) {
     pdf.setPage(i);
     pdf.setFontSize(8);
     pdf.setTextColor(161, 161, 170);
-    pdf.text(`Page ${i} of ${pageCount}`, width / 2, height - 8, { align: "center" });
+    pdf.text(dateStr, PAGE_MARGIN, height - 8, { align: "left" });
+    if (centerText) {
+      pdf.text(centerText, width / 2, height - 8, { align: "center" });
+    }
+    pdf.text(`Page ${i} of ${pageCount}`, width - PAGE_MARGIN, height - 8, { align: "right" });
   }
 }
 
@@ -119,6 +121,7 @@ function drawCoverPage(
   includePiecePools: boolean,
   logos?: { edge?: string; bunyan?: string },
   piecePoolGroups?: PiecePoolGroupData[],
+  opts?: ExportPDFOptions,
 ) {
   const { width } = getPageDimensions(pdf);
   const subtitle = piecePoolGroups && piecePoolGroups.length > 0
@@ -126,57 +129,93 @@ function drawCoverPage(
     : "";
   drawHeader(pdf, `${projectName} — ${buildingName}`, subtitle, logos);
 
-  let y = HEADER_HEIGHT + 15;
+  let y = HEADER_HEIGHT + 6;
 
-  pdf.setFontSize(16);
+  // Summary table title
+  pdf.setFontSize(13);
   pdf.setTextColor(9, 9, 11);
-  pdf.text("Overall Summary", PAGE_MARGIN, y);
-  y += 10;
+  pdf.text("Cutting Plan Summary", PAGE_MARGIN, y);
+  y += 6;
 
-  const totalBars = plans.reduce((sum, p) => sum + p.summary.totalBars, 0);
-  const totalWasteLength = plans.reduce((sum, p) => sum + p.summary.totalWasteLength, 0);
-  const totalDemandLength = plans.reduce(
-    (sum, p) => sum + p.bars.reduce((s: number, b: any) => s + b.pieces.reduce((ps: number, piece: any) => ps + piece.length, 0), 0),
-    0,
-  );
-  const avgUtilization = totalDemandLength > 0 ? (1 - totalWasteLength / (totalDemandLength + totalWasteLength)) * 100 : 0;
+  // Summary table (per-type + overall totals)
+  if (plans.length > 0) {
+    const sumCols = ["Profile Type", "Status", "Bars", "Waste %", "Utilization %"];
+    const sumColWidths = [60, 30, 25, 30, 35];
+    const sumTotalWidth = sumColWidths.reduce((a, b) => a + b, 0);
+    const sumXs: number[] = [PAGE_MARGIN];
+    for (let i = 0; i < sumColWidths.length; i++) {
+      sumXs.push(sumXs[i] + sumColWidths[i]);
+    }
 
-  pdf.setFontSize(11);
-  pdf.setTextColor(82, 82, 91);
-  pdf.text(`Total Bars: ${totalBars}`, PAGE_MARGIN, y);
-  y += 7;
-  pdf.text(`Total Waste: ${totalWasteLength > 0 ? ((totalWasteLength / (totalDemandLength + totalWasteLength)) * 100).toFixed(1) : "0"}%`, PAGE_MARGIN, y);
-  y += 7;
-  pdf.text(`Avg Utilization: ${avgUtilization.toFixed(1)}%`, PAGE_MARGIN, y);
-  y += 7;
-  pdf.text(`Profile Types: ${plans.map((p) => p.profileTypeLabel).join(", ")}`, PAGE_MARGIN, y);
-  y += 12;
+    const sumRowH = 7;
+    const sumHeaderH = 7;
 
-  pdf.setDrawColor(228, 228, 231);
-  pdf.setLineWidth(0.5);
-  pdf.line(PAGE_MARGIN, y, width - PAGE_MARGIN, y);
-  y += 10;
+    // Header row
+    pdf.setFillColor(244, 244, 245);
+    pdf.rect(PAGE_MARGIN, y, sumTotalWidth, sumHeaderH, "F");
+    pdf.setFont("helvetica", "bold");
+    pdf.setFontSize(8);
+    pdf.setTextColor(82, 82, 91);
+    for (let i = 0; i < sumCols.length; i++) {
+      const cx = sumXs[i] + sumColWidths[i] / 2;
+      pdf.text(sumCols[i], cx, y + sumHeaderH - 1.5, { align: "center" });
+    }
+    pdf.setFont("helvetica", "normal");
+    y += sumHeaderH;
 
-  pdf.setFontSize(14);
-  pdf.setTextColor(9, 9, 11);
-  pdf.text("Contents", PAGE_MARGIN, y);
-  y += 8;
+    // Data rows
+    pdf.setFontSize(8);
+    pdf.setTextColor(82, 82, 91);
+    let totalBars = 0;
+    let totalWasteLength = 0;
+    let totalDemandLength = 0;
 
-  pdf.setFontSize(10);
-  pdf.setTextColor(82, 82, 91);
-  for (const plan of plans) {
-    const status = plan.isApplied ? "Applied" : "Saved";
-    pdf.text(
-      `${plan.profileTypeLabel}  ·  ${status}  ·  ${plan.summary.totalBars} bars  ·  ${plan.summary.totalWastePercent.toFixed(1)}% waste`,
-      PAGE_MARGIN + 4,
-      y,
-    );
-    y += 6;
+    for (const plan of plans) {
+      const status = plan.isApplied ? "Applied" : "Saved";
+      const utilization = 100 - plan.summary.totalWastePercent;
+
+      pdf.setDrawColor(228, 228, 231);
+      pdf.setLineWidth(0.3);
+      pdf.line(PAGE_MARGIN, y, sumXs[sumXs.length - 1], y);
+
+      pdf.text(plan.profileTypeLabel, sumXs[0] + 2, y + sumRowH - 2, { align: "left" });
+      pdf.text(status, sumXs[1] + sumColWidths[1] / 2, y + sumRowH - 2, { align: "center" });
+      pdf.text(String(plan.summary.totalBars), sumXs[2] + sumColWidths[2] / 2, y + sumRowH - 2, { align: "center" });
+      pdf.text(`${plan.summary.totalWastePercent.toFixed(1)}%`, sumXs[3] + sumColWidths[3] / 2, y + sumRowH - 2, { align: "center" });
+      pdf.text(`${utilization.toFixed(1)}%`, sumXs[4] + sumColWidths[4] / 2, y + sumRowH - 2, { align: "center" });
+
+      totalBars += plan.summary.totalBars;
+      totalWasteLength += plan.summary.totalWasteLength;
+      totalDemandLength += plan.bars.reduce(
+        (s: number, b: any) => s + b.pieces.reduce((ps: number, piece: any) => ps + piece.length, 0), 0,
+      );
+
+      y += sumRowH;
+    }
+
+    // Total row
+    const totalWastePct = totalWasteLength > 0 ? (totalWasteLength / (totalDemandLength + totalWasteLength)) * 100 : 0;
+    const totalUtil = 100 - totalWastePct;
+
+    pdf.line(PAGE_MARGIN, y, sumXs[sumXs.length - 1], y);
+    pdf.setFillColor(244, 244, 245);
+    pdf.rect(PAGE_MARGIN, y, sumTotalWidth, sumRowH, "F");
+    pdf.setFont("helvetica", "bold");
+    pdf.text("Total", sumXs[0] + 2, y + sumRowH - 2, { align: "left" });
+    pdf.text(String(totalBars), sumXs[2] + sumColWidths[2] / 2, y + sumRowH - 2, { align: "center" });
+    pdf.text(`${totalWastePct.toFixed(1)}%`, sumXs[3] + sumColWidths[3] / 2, y + sumRowH - 2, { align: "center" });
+    pdf.text(`${totalUtil.toFixed(1)}%`, sumXs[4] + sumColWidths[4] / 2, y + sumRowH - 2, { align: "center" });
+    pdf.line(PAGE_MARGIN, y + sumRowH, sumXs[sumXs.length - 1], y + sumRowH);
+    pdf.setFont("helvetica", "normal");
+
+    y += sumRowH + 10;
   }
 
-  if (includePiecePools) {
-    pdf.text("Piece Pools (all groups)", PAGE_MARGIN + 4, y);
-    y += 6;
+  // Piece pool tables
+  if (includePiecePools && piecePoolGroups && opts) {
+    for (const group of piecePoolGroups) {
+      y = drawPiecePoolTable(pdf, group, opts, y);
+    }
   }
 }
 
@@ -523,7 +562,7 @@ function drawPiecePoolTable(
   pdf.setFontSize(14);
   pdf.setTextColor(9, 9, 11);
   pdf.text(`Piece Pool: ${groupInfo.pieceTemplateName}`, PAGE_MARGIN, y);
-  y += 10;
+  y += 6;
 
   const firstPieces = piecesBySize[0]?.pieces ?? [];
   const numPieceCols = firstPieces.length;
@@ -712,25 +751,12 @@ export async function generateExportPDF(opts: ExportPDFOptions): Promise<any> {
 
   const includePiecePools = (opts.piecePoolGroups?.length ?? 0) > 0;
 
-  // Cover page
-  drawCoverPage(pdf, opts.projectName, opts.buildingName, opts.plans, includePiecePools, logos, opts.piecePoolGroups);
+  // Cover page (includes summary table + piece pool tables)
+  drawCoverPage(pdf, opts.projectName, opts.buildingName, opts.plans, includePiecePools, logos, opts.piecePoolGroups, opts);
 
-  // Piece pools section (before plan sections)
-  if (includePiecePools && opts.piecePoolGroups) {
-    pdf.addPage();
-    let y = PAGE_MARGIN + 5;
-    pdf.setFontSize(16);
-    pdf.setTextColor(9, 9, 11);
-    pdf.text("Piece Pools", PAGE_MARGIN, y);
-    y += 10;
-
-    for (const group of opts.piecePoolGroups) {
-      y = drawPiecePoolTable(pdf, group, opts, y);
-    }
-  }
+  const { width, height } = getPageDimensions(pdf);
 
   // Plan sections — two plans per page (left + right column)
-  const { width, height } = getPageDimensions(pdf);
   const colGap = 20;
   const colWidth = (width - 2 * PAGE_MARGIN - colGap) / 2;
   const col1X = PAGE_MARGIN;
@@ -759,7 +785,11 @@ export async function generateExportPDF(opts: ExportPDFOptions): Promise<any> {
   }
 
   // Add page footers
-  addPageFooters(pdf);
+  const footerTitle = `${opts.projectName} — ${opts.buildingName}`;
+  const footerSubtitle = opts.piecePoolGroups && opts.piecePoolGroups.length > 0
+    ? opts.piecePoolGroups.map((g) => g.group.pieceTemplateName).join(", ")
+    : "";
+  addPageFooters(pdf, footerTitle, footerSubtitle);
 
   return pdf;
 }

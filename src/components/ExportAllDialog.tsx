@@ -10,7 +10,7 @@ import { Button } from "./ui/button";
 import { Checkbox } from "./ui/checkbox";
 import { Badge } from "./ui/badge";
 import { HugeiconsIcon } from "@hugeicons/react";
-import { FileDownloadIcon } from "@hugeicons/core-free-icons";
+import { Pdf01Icon } from "@hugeicons/core-free-icons";
 import type { CuttingPlan } from "../hooks/useCuttingPlans";
 import type { PiecePoolGroupData } from "../hooks/usePiecePools";
 import { generateExportPDF, type PlanSectionData } from "../utils/exportPDF";
@@ -173,7 +173,7 @@ export default function ExportAllDialog({
             onClick={handleExport}
             disabled={selectedPlanIds.size === 0 || isExporting}
           >
-            <HugeiconsIcon icon={FileDownloadIcon} size={14} />
+            <HugeiconsIcon icon={Pdf01Icon} size={14} />
             {isExporting ? "Exporting..." : "Export PDF"}
           </Button>
         </DialogFooter>
