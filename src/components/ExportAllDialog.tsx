@@ -46,6 +46,7 @@ export default function ExportAllDialog({
     () => new Set(savedPlans.map((p) => p.id)),
   );
   const [includePiecePools, setIncludePiecePools] = useState(true);
+  const [includeMiniPiecePools, setIncludeMiniPiecePools] = useState(true);
   const [isExporting, setIsExporting] = useState(false);
 
   // Reset selection when dialog opens
@@ -93,6 +94,7 @@ export default function ExportAllDialog({
         buildingName,
         plans: planSections,
         piecePoolGroups: pools,
+        includeMiniPiecePools: includeMiniPiecePools && !!pools,
         unit,
         unitLabel,
         getRGBForLength,
@@ -156,13 +158,22 @@ export default function ExportAllDialog({
             )}
           </div>
 
-          <label className="flex items-center gap-2.5 px-3 py-2 rounded-md border border-border/60 cursor-pointer hover:bg-muted/50 transition-colors">
-            <Checkbox
-              checked={includePiecePools}
-              onCheckedChange={(v) => setIncludePiecePools(v === true)}
-            />
-            <span className="text-sm">Include piece pools table</span>
-          </label>
+          <div className="flex items-center gap-4 px-3 py-2 rounded-md border border-border/60">
+            <label className="flex items-center gap-2.5 cursor-pointer hover:bg-muted/50 transition-colors px-2 py-1 rounded">
+              <Checkbox
+                checked={includePiecePools}
+                onCheckedChange={(v) => setIncludePiecePools(v === true)}
+              />
+              <span className="text-sm">Pool Table</span>
+            </label>
+            <label className="flex items-center gap-2.5 cursor-pointer hover:bg-muted/50 transition-colors px-2 py-1 rounded">
+              <Checkbox
+                checked={includeMiniPiecePools}
+                onCheckedChange={(v) => setIncludeMiniPiecePools(v === true)}
+              />
+              <span className="text-sm">Mini Tables</span>
+            </label>
+          </div>
         </div>
 
         <DialogFooter>

@@ -3,6 +3,8 @@ import { createPortal } from 'react-dom';
 import { useApp, ACTIONS } from '../../context/AppContext';
 import { formatLength } from '../../engine/units';
 import { validateMove } from '../../engine/optimizer';
+import { generateExportPDF, type PlanSectionData } from '../../utils/exportPDF';
+import type { PiecePoolGroupData } from '../../hooks/usePiecePools';
 import {
   CircleGaugeIcon, ScissorIcon, PackageIcon, WasteIcon, DollarSignIcon,
   PrinterIcon, FileDownloadIcon, DragDropVerticalIcon, Recycle01Icon, Add01Icon, Delete02Icon, ListSettingIcon,
@@ -54,7 +56,23 @@ export interface ResultsPanelApplyProps {
   isClearing?: boolean;
 }
 
-export default function ResultsPanel({ applyProps }: { applyProps?: ResultsPanelApplyProps } = {}) {
+export interface ResultsPanelExportProps {
+  projectName: string;
+  buildingName: string;
+  profileType: string;
+  profileTypeLabel: string;
+  piecePoolGroups: PiecePoolGroupData[];
+  unit: string;
+  unitLabel: string;
+}
+
+export default function ResultsPanel({
+  applyProps,
+  exportProps,
+}: {
+  applyProps?: ResultsPanelApplyProps;
+  exportProps?: ResultsPanelExportProps;
+} = {}) {
   const { state, dispatch, getColorForLength, getRGBForLength, getStockById } = useApp();
   const { cuttingPlan, isOptimized, settings, stockLengths } = state;
   const { unit, pricePerBar, kerfWidth } = settings;
@@ -86,6 +104,29 @@ export default function ResultsPanel({ applyProps }: { applyProps?: ResultsPanel
   const estimatedCost = pricePerBar > 0 ? summary.totalBars * pricePerBar : null;
 
   const generatePDF = async () => {
+    if (exportProps) {
+      const planSection: PlanSectionData = {
+        profileType: exportProps.profileType,
+        profileTypeLabel: exportProps.profileTypeLabel,
+        isApplied: applyProps?.isApplied ?? false,
+        bars,
+        summary,
+      };
+      const pools = exportProps.piecePoolGroups.filter((g) => g.sizeGroups.length > 0);
+      return generateExportPDF({
+        projectName: exportProps.projectName,
+        buildingName: exportProps.buildingName,
+        plans: [planSection],
+        piecePoolGroups: pools.length > 0 ? pools : undefined,
+        includeMiniPiecePools: true,
+        unit: exportProps.unit,
+        unitLabel: exportProps.unitLabel,
+        getRGBForLength,
+        getStockById,
+      });
+    }
+
+    // Fallback: old simple PDF (used when exportProps not provided)
     const { default: jsPDF } = await import('jspdf');
     const pdf = new jsPDF('p', 'mm', 'a4');
 

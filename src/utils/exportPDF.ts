@@ -19,6 +19,7 @@ export interface ExportPDFOptions {
   buildingName: string;
   plans: PlanSectionData[];
   piecePoolGroups?: PiecePoolGroupData[];
+  includeMiniPiecePools?: boolean;
   unit: string;
   unitLabel: string;
   getRGBForLength: (length: number) => [number, number, number];
@@ -131,17 +132,22 @@ function drawCoverPage(
 
   let y = HEADER_HEIGHT + 6;
 
-  // Summary table title
-  pdf.setFontSize(13);
+  // Summary table title — colored bar
+  pdf.setFillColor(244, 244, 245);
+  pdf.rect(PAGE_MARGIN, y, width - 2 * PAGE_MARGIN, 8, "F");
+  pdf.setFont("helvetica", "bold");
+  pdf.setFontSize(11);
   pdf.setTextColor(9, 9, 11);
-  pdf.text("Cutting Plan Summary", PAGE_MARGIN, y);
-  y += 6;
+  pdf.text("Cutting Plan Summary", PAGE_MARGIN + 2, y + 5.5);
+  pdf.setFont("helvetica", "normal");
+  y += 10;
 
   // Summary table (per-type + overall totals)
   if (plans.length > 0) {
-    const sumCols = ["Profile Type", "Status", "Bars", "Waste %", "Utilization %"];
-    const sumColWidths = [60, 30, 25, 30, 35];
-    const sumTotalWidth = sumColWidths.reduce((a, b) => a + b, 0);
+    const sumCols = ["Profile Type", "Bars", "Waste %", "Utilization %"];
+    const sumColRatios = [0.3, 0.3, 0.2, 0.2];
+    const sumTotalWidth = width - 2 * PAGE_MARGIN;
+    const sumColWidths = sumColRatios.map((r) => r * sumTotalWidth);
     const sumXs: number[] = [PAGE_MARGIN];
     for (let i = 0; i < sumColWidths.length; i++) {
       sumXs.push(sumXs[i] + sumColWidths[i]);
@@ -150,6 +156,11 @@ function drawCoverPage(
     const sumRowH = 7;
     const sumHeaderH = 7;
 
+    // Top border
+    pdf.setDrawColor(228, 228, 231);
+    pdf.setLineWidth(0.5);
+    pdf.line(PAGE_MARGIN, y, sumXs[sumXs.length - 1], y);
+
     // Header row
     pdf.setFillColor(244, 244, 245);
     pdf.rect(PAGE_MARGIN, y, sumTotalWidth, sumHeaderH, "F");
@@ -157,10 +168,20 @@ function drawCoverPage(
     pdf.setFontSize(8);
     pdf.setTextColor(82, 82, 91);
     for (let i = 0; i < sumCols.length; i++) {
-      const cx = sumXs[i] + sumColWidths[i] / 2;
-      pdf.text(sumCols[i], cx, y + sumHeaderH - 1.5, { align: "center" });
+      if (i < 2) {
+        pdf.text(sumCols[i], sumXs[i] + 2, y + sumHeaderH - 2, { align: "left" });
+      } else {
+        const cx = sumXs[i] + sumColWidths[i] / 2;
+        pdf.text(sumCols[i], cx, y + sumHeaderH - 2, { align: "center" });
+      }
     }
     pdf.setFont("helvetica", "normal");
+
+    // Bottom border for header row
+    pdf.setDrawColor(228, 228, 231);
+    pdf.setLineWidth(0.3);
+    pdf.line(PAGE_MARGIN, y + sumHeaderH, sumXs[sumXs.length - 1], y + sumHeaderH);
+
     y += sumHeaderH;
 
     // Data rows
@@ -171,18 +192,26 @@ function drawCoverPage(
     let totalDemandLength = 0;
 
     for (const plan of plans) {
-      const status = plan.isApplied ? "Applied" : "Saved";
       const utilization = 100 - plan.summary.totalWastePercent;
+
+      // Build bars breakdown string
+      const barsStr = Object.entries(plan.summary.barsBreakdown)
+        .map(([stockId, count]: any) => {
+          const stock = opts?.getStockById(stockId);
+          const label = stock?.label || stockId;
+          const len = stock?.length && opts ? ` (${formatLength(stock.length, opts.unit)})` : "";
+          return `${count}× ${label}${len}`;
+        })
+        .join(", ");
 
       pdf.setDrawColor(228, 228, 231);
       pdf.setLineWidth(0.3);
       pdf.line(PAGE_MARGIN, y, sumXs[sumXs.length - 1], y);
 
       pdf.text(plan.profileTypeLabel, sumXs[0] + 2, y + sumRowH - 2, { align: "left" });
-      pdf.text(status, sumXs[1] + sumColWidths[1] / 2, y + sumRowH - 2, { align: "center" });
-      pdf.text(String(plan.summary.totalBars), sumXs[2] + sumColWidths[2] / 2, y + sumRowH - 2, { align: "center" });
-      pdf.text(`${plan.summary.totalWastePercent.toFixed(1)}%`, sumXs[3] + sumColWidths[3] / 2, y + sumRowH - 2, { align: "center" });
-      pdf.text(`${utilization.toFixed(1)}%`, sumXs[4] + sumColWidths[4] / 2, y + sumRowH - 2, { align: "center" });
+      pdf.text(barsStr, sumXs[1] + 2, y + sumRowH - 2, { align: "left" });
+      pdf.text(`${plan.summary.totalWastePercent.toFixed(1)}%`, sumXs[2] + sumColWidths[2] / 2, y + sumRowH - 2, { align: "center" });
+      pdf.text(`${utilization.toFixed(1)}%`, sumXs[3] + sumColWidths[3] / 2, y + sumRowH - 2, { align: "center" });
 
       totalBars += plan.summary.totalBars;
       totalWasteLength += plan.summary.totalWasteLength;
@@ -202,9 +231,9 @@ function drawCoverPage(
     pdf.rect(PAGE_MARGIN, y, sumTotalWidth, sumRowH, "F");
     pdf.setFont("helvetica", "bold");
     pdf.text("Total", sumXs[0] + 2, y + sumRowH - 2, { align: "left" });
-    pdf.text(String(totalBars), sumXs[2] + sumColWidths[2] / 2, y + sumRowH - 2, { align: "center" });
-    pdf.text(`${totalWastePct.toFixed(1)}%`, sumXs[3] + sumColWidths[3] / 2, y + sumRowH - 2, { align: "center" });
-    pdf.text(`${totalUtil.toFixed(1)}%`, sumXs[4] + sumColWidths[4] / 2, y + sumRowH - 2, { align: "center" });
+    pdf.text(String(totalBars), sumXs[1] + 2, y + sumRowH - 2, { align: "left" });
+    pdf.text(`${totalWastePct.toFixed(1)}%`, sumXs[2] + sumColWidths[2] / 2, y + sumRowH - 2, { align: "center" });
+    pdf.text(`${totalUtil.toFixed(1)}%`, sumXs[3] + sumColWidths[3] / 2, y + sumRowH - 2, { align: "center" });
     pdf.line(PAGE_MARGIN, y + sumRowH, sumXs[sumXs.length - 1], y + sumRowH);
     pdf.setFont("helvetica", "normal");
 
@@ -419,32 +448,27 @@ function drawPlanSectionInColumn(
     .map(([label, info]) => `${info.count}× ${label} (${formatLength(info.length, opts.unit)})`)
     .join(", ");
 
-  // Type name + status badge
-  pdf.setFontSize(12);
+  // Type name — colored bar
+  pdf.setFillColor(244, 244, 245);
+  pdf.rect(colX, y, colWidth, 8, "F");
+  pdf.setFontSize(11);
   pdf.setFont("helvetica", "bold");
   pdf.setTextColor(9, 9, 11);
   const typeText = plan.profileTypeLabel.toUpperCase();
-  pdf.text(typeText, colX, y + 4);
-  let textX = colX + pdf.getTextWidth(typeText) + 4;
-
-  const statusText = plan.isApplied ? "Applied" : "Saved";
-  const statusColor = plan.isApplied ? [22, 163, 74] : [82, 82, 91];
-  pdf.setFontSize(8);
-  pdf.setFont("helvetica", "normal");
-  pdf.setTextColor(statusColor[0], statusColor[1], statusColor[2]);
-  pdf.text(`[${statusText}]`, textX, y + 4);
+  pdf.text(typeText, colX + 2, y + 5.5);
 
   // Subtitle: materials + waste
+  pdf.setFont("helvetica", "normal");
   pdf.setFontSize(8);
   pdf.setTextColor(113, 113, 122);
   const infoText = `${materialsStr} · ${plan.summary.totalWastePercent.toFixed(1)}% waste`;
-  pdf.text(infoText, colX, y + 10);
+  pdf.text(infoText, colX + 2, y + 12);
 
   y += 16;
 
   // Mini piece pool table for this profile type
   let poolRows: { sizeNum: number; count: number; avgW: string; avgH: string; locations: string[]; pieces: { label: string; length: number; quantity: number }[] }[] = [];
-  if (opts.piecePoolGroups && opts.piecePoolGroups.length > 0) {
+  if (opts.includeMiniPiecePools && opts.piecePoolGroups && opts.piecePoolGroups.length > 0) {
     const poolResult = drawMiniPiecePoolTable(pdf, opts.piecePoolGroups, plan.profileType, opts, colX, colWidth, y, pageHeight);
     y = poolResult.y;
     poolRows = poolResult.rows;
@@ -558,11 +582,16 @@ function drawPiecePoolTable(
   // Check if we need a new page
   y = ensureSpace(pdf, y, 40);
 
-  // Section header
-  pdf.setFontSize(14);
+  // Section header — colored bar with template name
+  y = ensureSpace(pdf, y, 50);
+  pdf.setFillColor(244, 244, 245);
+  pdf.rect(PAGE_MARGIN, y, width - 2 * PAGE_MARGIN, 8, "F");
+  pdf.setFont("helvetica", "bold");
+  pdf.setFontSize(11);
   pdf.setTextColor(9, 9, 11);
-  pdf.text(`Piece Pool: ${groupInfo.pieceTemplateName}`, PAGE_MARGIN, y);
-  y += 6;
+  pdf.text(`Piece Pool: ${groupInfo.pieceTemplateName}`, PAGE_MARGIN + 2, y + 5.5);
+  pdf.setFont("helvetica", "normal");
+  y += 10;
 
   const firstPieces = piecesBySize[0]?.pieces ?? [];
   const numPieceCols = firstPieces.length;
@@ -587,10 +616,15 @@ function drawPiecePoolTable(
   }
 
   const rowHeight = 7;
-  const headerRowHeight = 6;
+  const headerRowHeight = 7;
 
   // ── Profile type group header row ──
   y = ensureSpace(pdf, y, headerRowHeight * 2 + rowHeight * sizeGroups.length * 2 + 10);
+
+  // Top border line
+  pdf.setDrawColor(228, 228, 231);
+  pdf.setLineWidth(0.5);
+  pdf.line(PAGE_MARGIN, y, colXs[colXs.length - 1], y);
 
   pdf.setFillColor(244, 244, 245);
   pdf.rect(PAGE_MARGIN, y, colXs[colXs.length - 1] - PAGE_MARGIN, headerRowHeight, "F");
@@ -604,9 +638,9 @@ function drawPiecePoolTable(
   for (let i = 0; i < fixedHeaders.length; i++) {
     const cx = colXs[i] + allColWidths[i] / 2;
     if (fixedHeaders[i] === "Locations") {
-      pdf.text(fixedHeaders[i], colXs[i] + 1, y + headerRowHeight - 1.5, { align: "left" });
+      pdf.text(fixedHeaders[i], colXs[i] + 1, y + headerRowHeight - 2, { align: "left" });
     } else {
-      pdf.text(fixedHeaders[i], cx, y + headerRowHeight - 1.5, { align: "center" });
+      pdf.text(fixedHeaders[i], cx, y + headerRowHeight - 2, { align: "center" });
     }
   }
 
@@ -618,15 +652,15 @@ function drawPiecePoolTable(
     const endX = colXs[endCol];
     const cx = (startX + endX) / 2;
 
-    // Draw border for group header
-    pdf.setDrawColor(228, 228, 231);
-    pdf.setLineWidth(0.3);
-    pdf.line(startX, y, endX, y);
-
     pdf.setFontSize(8);
     pdf.setTextColor(9, 9, 11);
-    pdf.text(pg.label, cx, y + headerRowHeight - 1.5, { align: "center" });
+    pdf.text(pg.label, cx, y + headerRowHeight - 2, { align: "center" });
   }
+
+  // Bottom border for first header row
+  pdf.setDrawColor(228, 228, 231);
+  pdf.setLineWidth(0.3);
+  pdf.line(PAGE_MARGIN, y + headerRowHeight, colXs[colXs.length - 1], y + headerRowHeight);
 
   y += headerRowHeight;
 
@@ -642,10 +676,15 @@ function drawPiecePoolTable(
     const col = 5 + i;
     const cx = colXs[col] + allColWidths[col] / 2;
     const piece = firstPieces[i];
-    pdf.text(`${piece.label}×${piece.quantity}`, cx, y + headerRowHeight - 1.5, { align: "center" });
+    pdf.text(`${piece.label}×${piece.quantity}`, cx, y + headerRowHeight - 2, { align: "center" });
   }
 
   y += headerRowHeight;
+
+  // Bottom border for piece label header row
+  pdf.setDrawColor(228, 228, 231);
+  pdf.setLineWidth(0.3);
+  pdf.line(PAGE_MARGIN, y, colXs[colXs.length - 1], y);
 
   // ── Data rows (per size group) ──
   for (let si = 0; si < sizeGroups.length; si++) {

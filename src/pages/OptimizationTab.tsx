@@ -838,6 +838,15 @@ export function OptimizationTab({
             onApply: handleApplyPlan,
             onUnapply: handleUnapplyPlan,
           }}
+          exportProps={{
+            projectName,
+            buildingName: building.name,
+            profileType: activeProfileType ?? "",
+            profileTypeLabel: profileTypeLabel(activeProfileType ?? ""),
+            piecePoolGroups,
+            unit: displayUnit,
+            unitLabel,
+          }}
         />
       )}
 
