@@ -16,6 +16,7 @@ export interface Env {
   TURSO_URL: string;
   TURSO_TOKEN: string;
   JWT_SECRET: string;
+  ASSETS: Fetcher;
 }
 
 const app = new Hono<{ Bindings: Env }>();
@@ -24,7 +25,7 @@ app.use("*", logger());
 app.use(
   "*",
   cors({
-    origin: ["http://localhost:5173", "http://localhost:4173"],
+    origin: (origin) => origin,
     allowHeaders: ["Content-Type", "Authorization"],
     allowMethods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     credentials: true,
@@ -49,5 +50,8 @@ protectedApi.route("/profile-types", profileTypeRoutes);
 protectedApi.route("/dashboard", dashboardRoutes);
 
 app.route("/api", protectedApi);
+
+// SPA fallback: serve index.html for any non-API GET request
+app.get("*", (c) => c.env.ASSETS.fetch(new Request(new URL("/", c.req.url))));
 
 export default app;

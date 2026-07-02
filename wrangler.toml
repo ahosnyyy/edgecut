@@ -3,6 +3,11 @@ main = "api/index.ts"
 compatibility_date = "2024-12-01"
 compatibility_flags = ["nodejs_compat"]
 
+[assets]
+directory = "dist"
+binding = "ASSETS"
+not_found_handling = "single-page-application"
+
 [vars]
 
 # TURSO_URL, TURSO_TOKEN, JWT_SECRET should be set via .dev.vars for local dev

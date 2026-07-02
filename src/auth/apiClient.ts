@@ -1,4 +1,4 @@
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8787";
+const API_URL = import.meta.env.VITE_API_URL ?? (import.meta.env.PROD ? "" : "http://localhost:8787");
 
 const JWT_KEY = "edgecut_jwt";
 const USER_KEY = "edgecut_user";
