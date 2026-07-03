@@ -38,6 +38,13 @@ function groupBars(bars: any[]): any[] {
       grouped.push({ ...bar, signature, count: 1 });
     }
   });
+  // Sort: remnants first, then by count (desc), then by waste (asc)
+  grouped.sort((a, b) => {
+    if (a.isRemnant && !b.isRemnant) return -1;
+    if (!a.isRemnant && b.isRemnant) return 1;
+    if (b.count !== a.count) return b.count - a.count;
+    return a.waste - b.waste;
+  });
   return grouped;
 }
 
@@ -475,7 +482,13 @@ function drawPlanSectionInColumn(
   }
 
   const barsToPrint = groupBars(plan.bars);
-  barsToPrint.sort((a: any, b: any) => b.count - a.count);
+  // Sort: remnants first, then by count (desc), then by waste (asc)
+  barsToPrint.sort((a: any, b: any) => {
+    if (a.isRemnant && !b.isRemnant) return -1;
+    if (!a.isRemnant && b.isRemnant) return 1;
+    if (b.count !== a.count) return b.count - a.count;
+    return a.waste - b.waste;
+  });
 
   let barCount = 0;
   let remnantCount = 0;
@@ -489,16 +502,32 @@ function drawPlanSectionInColumn(
 
     const displayIndex = bar.isRemnant ? remnantCount++ : barCount++;
 
+    // Remnant icon offset: shift count + bar right to make room for icon
+    const remnantIconW = bar.isRemnant ? 5 : 0;
+
     // Count prefix in fixed-width column so bars align
     const countColWidth = 6;
     const countText = `${bar.count}×`;
     pdf.setFontSize(7);
     pdf.setTextColor(113, 113, 122);
-    pdf.text(countText, colX, y + barHeight / 2 + 1, { align: "left" });
+    pdf.text(countText, colX + remnantIconW, y + barHeight / 2 + 1, { align: "left" });
+
+    // Draw remnant icon: small circle with "R"
+    if (bar.isRemnant) {
+      pdf.setFillColor(113, 113, 122);
+      pdf.circle(colX + 1.5, y + barHeight / 2, 1.8, "F");
+      pdf.setTextColor(255, 255, 255);
+      pdf.setFont("helvetica", "bold");
+      pdf.setFontSize(4);
+      pdf.text("R", colX + 1.5, y + barHeight / 2, { align: "center", baseline: "middle" });
+      pdf.setFont("helvetica", "normal");
+      pdf.setFontSize(7);
+      pdf.setTextColor(113, 113, 122);
+    }
 
     // Draw waste area background
-    const barX = colX + countColWidth + 1;
-    const barDrawWidth = colWidth - countColWidth - 1;
+    const barX = colX + remnantIconW + countColWidth + 1;
+    const barDrawWidth = colWidth - remnantIconW - countColWidth - 1;
     pdf.setFillColor(244, 244, 245);
     pdf.rect(barX, y, barDrawWidth, barHeight, "F");
 
@@ -545,8 +574,8 @@ function drawPlanSectionInColumn(
 
     // Waste label
     if (bar.waste > 0) {
-      const wasteW = (bar.waste / bar.stockLength) * colWidth;
-      const wasteX = colX + colWidth - wasteW;
+      const wasteW = (bar.waste / bar.stockLength) * barDrawWidth;
+      const wasteX = barX + barDrawWidth - wasteW;
 
       pdf.setFont("helvetica", "bold");
       pdf.setFontSize(6);

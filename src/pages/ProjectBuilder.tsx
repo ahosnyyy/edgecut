@@ -411,6 +411,8 @@ function StockManagement({ projectId, profileSystems, search, setSearch, filterT
   const [newLabel, setNewLabel] = useState("");
   const [selectedDefaultId, setSelectedDefaultId] = useState<string | null>(null);
   const [addMode, setAddMode] = useState<"catalog" | "custom">("catalog");
+  const [newProfileType, setNewProfileType] = useState("");
+  const [newProfileSystem, setNewProfileSystem] = useState<string>(profileSystems[0] ?? "manazil");
 
   const defaultsForView = useMemo(() => {
     if (!stockCatalog || view === "remnants") return [];
@@ -450,7 +452,7 @@ function StockManagement({ projectId, profileSystems, search, setSearch, filterT
     if (filterType !== "all") {
       result = result.filter((s) => {
         const def = s.sourceDefaultId ? stockCatalog?.find((d) => d.id === s.sourceDefaultId) : null;
-        return def?.profileType === filterType;
+        return (def?.profileType ?? s.profileType) === filterType;
       });
     }
     if (search.trim()) {
@@ -458,8 +460,8 @@ function StockManagement({ projectId, profileSystems, search, setSearch, filterT
       result = result.filter((s) => {
         const def = s.sourceDefaultId ? stockCatalog?.find((d) => d.id === s.sourceDefaultId) : null;
         return (
-          (def?.label ?? "").toLowerCase().includes(q) ||
-          (def?.profileType ?? "").toLowerCase().includes(q)
+          (def?.label ?? s.label ?? "").toLowerCase().includes(q) ||
+          (def?.profileType ?? s.profileType ?? "").toLowerCase().includes(q)
         );
       });
     }
@@ -469,6 +471,12 @@ function StockManagement({ projectId, profileSystems, search, setSearch, filterT
   const handleAdd = () => {
     const isRemnant = view === "remnants";
     const qty = isRemnant ? (newQty === -1 ? 1 : newQty) : newQty;
+
+    // Require profile type for custom entries
+    if (effectiveMode === "custom" && !newProfileType) {
+      setQtyError("Profile type is required.");
+      return;
+    }
 
     // Require label for custom entries
     if (effectiveMode === "custom" && !newLabel.trim()) {
@@ -501,8 +509,18 @@ function StockManagement({ projectId, profileSystems, search, setSearch, filterT
     setQtyError(null);
 
     // Check if an entry with the same sourceDefaultId already exists
+    // For custom entries (no sourceDefaultId), also match on profileType, length, and label
+    const newLengthVal = newLength === "" ? null : newLength;
+    const newLabelVal = effectiveMode === "custom" ? (newLabel.trim() || null) : null;
     const existing = filtered.find(
-      (s) => s.sourceDefaultId === (selectedDefaultId ?? null) && s.isRemnant === isRemnant,
+      (s) =>
+        s.sourceDefaultId === (selectedDefaultId ?? null) &&
+        s.isRemnant === isRemnant &&
+        (selectedDefaultId
+          ? true
+          : s.profileType === (effectiveMode === "custom" ? newProfileType : "") &&
+            s.length === newLengthVal &&
+            (s.label ?? null) === (newLabelVal ?? (selectedDefaultId ? null : null))),
     );
 
     if (existing && qty > 0) {
@@ -518,7 +536,8 @@ function StockManagement({ projectId, profileSystems, search, setSearch, filterT
       addMutation.mutate({
         projectId,
         data: {
-          profileType: def?.profileType ?? "",
+          profileType: effectiveMode === "custom" ? newProfileType : (def?.profileType ?? ""),
+          profileSystem: effectiveMode === "custom" ? newProfileSystem : undefined,
           color: def?.color ?? "#000000",
           length: newLength === "" ? (def?.length ?? null) : newLength,
           label: effectiveMode === "custom" ? (newLabel.trim() || null) : (def?.label ?? null),
@@ -543,6 +562,8 @@ function StockManagement({ projectId, profileSystems, search, setSearch, filterT
     setNewLabel("");
     setQtyError(null);
     setAddMode("catalog");
+    setNewProfileType("");
+    setNewProfileSystem(profileSystems[0] ?? "manazil");
   };
 
   if (isLoading) {
@@ -690,11 +711,15 @@ function StockManagement({ projectId, profileSystems, search, setSearch, filterT
                           </Badge>
                         )}
                         <span className="truncate">
-                          {def
-                            ? ` · ${profileTypeLabel(def.profileType)} · ${formatLength(entry.length ?? def.length)}`
-                            : entry.length != null
-                              ? ` · ${profileTypeLabel(entry.profileType)} · ${formatLength(entry.length)}`
-                              : "Custom"}
+                          {(() => {
+                            const pt = def?.profileType ?? entry.profileType;
+                            const len = entry.length ?? def?.length ?? null;
+                            if (!pt && len == null) return "Custom";
+                            const parts: string[] = [];
+                            if (pt) parts.push(profileTypeLabel(pt));
+                            if (len != null) parts.push(formatLength(len));
+                            return parts.join(" · ");
+                          })()}
                         </span>
                       </>
                     );
@@ -846,15 +871,52 @@ function StockManagement({ projectId, profileSystems, search, setSearch, filterT
               )}
 
               {effectiveMode === "custom" && (
-                <div className="flex flex-col gap-1.5">
-                  <Label htmlFor="ns-label">Label <span className="text-red-500">*</span></Label>
-                  <Input
-                    id="ns-label"
-                    value={newLabel}
-                    onChange={(e) => setNewLabel(e.target.value)}
-                    placeholder="e.g. Leftover from job X"
-                  />
-                </div>
+                <>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="flex flex-col gap-1.5">
+                      <Label>Profile System <span className="text-red-500">*</span></Label>
+                      <Select
+                        value={newProfileSystem}
+                        onValueChange={(v) => setNewProfileSystem(v ?? "manazil")}
+                      >
+                        <SelectTrigger className="h-8 w-full">
+                          <SelectValue>
+                            {newProfileSystem === "manazil" ? "Manazil" : "Premier"}
+                          </SelectValue>
+                        </SelectTrigger>
+                        <SelectContent>
+                          {profileSystems.map((s) => (
+                            <SelectItem key={s} value={s}>{s.charAt(0).toUpperCase() + s.slice(1)}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="flex flex-col gap-1.5">
+                      <Label>Profile Type <span className="text-red-500">*</span></Label>
+                      <Select value={newProfileType} onValueChange={(v) => setNewProfileType(v ?? "")}>
+                        <SelectTrigger className="h-8 w-full">
+                          <SelectValue placeholder="Select...">
+                            {newProfileType ? profileTypeLabel(newProfileType) : "Select..."}
+                          </SelectValue>
+                        </SelectTrigger>
+                        <SelectContent>
+                          {(profileTypes ?? []).map((pt) => (
+                            <SelectItem key={pt.key} value={pt.key}>{pt.label}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    <Label htmlFor="ns-label">Label <span className="text-red-500">*</span></Label>
+                    <Input
+                      id="ns-label"
+                      value={newLabel}
+                      onChange={(e) => setNewLabel(e.target.value)}
+                      placeholder="e.g. Leftover from job X"
+                    />
+                  </div>
+                </>
               )}
 
               <div className="grid grid-cols-2 gap-3">

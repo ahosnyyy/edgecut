@@ -420,6 +420,35 @@ export function OptimizationTab({
   // Detect if demand pieces have changed since the plan was last optimized
   const demandChanged = savedPlanDemandSignature !== null && currentDemandSignature !== null && savedPlanDemandSignature !== currentDemandSignature;
 
+  // Compute stock signature from the saved plan's bars (stockLengthId -> stockLength)
+  const savedPlanStockSignature = useMemo(() => {
+    if (!savedPlan) return null;
+    try {
+      const bars = JSON.parse(savedPlan.bars) as { stockLengthId: string; stockLength: number }[];
+      const stockMap = new Map<string, number>();
+      for (const bar of bars) {
+        if (!stockMap.has(bar.stockLengthId)) {
+          stockMap.set(bar.stockLengthId, bar.stockLength);
+        }
+      }
+      return Array.from(stockMap.entries()).map(([id, len]) => `${id}:${len}`).sort().join('|');
+    } catch {
+      return null;
+    }
+  }, [savedPlan]);
+
+  // Compute stock signature from current stock entries for the active profile type
+  const currentStockSignature = useMemo(() => {
+    if (!activePool) return null;
+    return activePool.stock
+      .map((s) => `${s.id}:${s.length ?? 0}`)
+      .sort()
+      .join('|');
+  }, [activePool]);
+
+  // Detect if stock entries were removed or their lengths changed since the plan was last optimized
+  const stockChanged = savedPlanStockSignature !== null && currentStockSignature !== null && savedPlanStockSignature !== currentStockSignature;
+
   // Track which plan is currently loaded in the optimizer (from DB or new optimization)
   const [loadedPlanId, setLoadedPlanId] = useState<string | null>(null);
   const [showReapplyConfirm, setShowReapplyConfirm] = useState(false);
@@ -704,6 +733,17 @@ export function OptimizationTab({
               >
                 <HugeiconsIcon icon={AlertCircleIcon} size={12} />
                 {appliedPlan ? "Sizes changed — un-apply & re-optimize" : "Sizes changed — re-optimize"}
+              </Badge>
+            )}
+            {stockChanged && savedPlan && (
+              <Badge
+                variant="outline"
+                className={appliedPlan
+                  ? "border-amber-500/40 text-amber-700 dark:text-amber-300 bg-amber-500/5 gap-1"
+                  : "border-blue-500/40 text-blue-700 dark:text-blue-300 bg-blue-500/5 gap-1"}
+              >
+                <HugeiconsIcon icon={AlertCircleIcon} size={12} />
+                {appliedPlan ? "Stock changed — un-apply & re-optimize" : "Stock changed — re-optimize"}
               </Badge>
             )}
           </div>

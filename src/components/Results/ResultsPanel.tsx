@@ -41,6 +41,13 @@ function groupBars(bars: any[]) {
       grouped.push({ ...bar, signature, count: 1 });
     }
   });
+  // Sort: remnants first, then by count (desc), then by waste (asc)
+  grouped.sort((a, b) => {
+    if (a.isRemnant && !b.isRemnant) return -1;
+    if (!a.isRemnant && b.isRemnant) return 1;
+    if (b.count !== a.count) return b.count - a.count;
+    return a.waste - b.waste;
+  });
   return grouped;
 }
 
@@ -184,9 +191,13 @@ export default function ResultsPanel({
     currentY += 12;
 
     const barsToPrint = groupBars(bars);
-    if (sortByCount) {
-      barsToPrint.sort((a: any, b: any) => b.count - a.count);
-    }
+    // Sort: remnants first, then by count (desc) if enabled, then by waste (asc)
+    barsToPrint.sort((a: any, b: any) => {
+      if (a.isRemnant && !b.isRemnant) return -1;
+      if (!a.isRemnant && b.isRemnant) return 1;
+      if (sortByCount) return b.count - a.count;
+      return a.waste - b.waste;
+    });
     let pdfBarCount = 0;
     let pdfRemnantCount = 0;
 
@@ -207,7 +218,21 @@ export default function ResultsPanel({
       pdf.setFontSize(10);
       pdf.setTextColor(9, 9, 11);
       const title = `${bar.count > 1 ? `${bar.count}× ` : ''}${bar.stockLabel || `${bar.isRemnant ? 'Remnant' : 'Bar'} ${displayIndex + 1}`}`;
-      pdf.text(title, margin, currentY);
+      let titleX = margin;
+      if (bar.isRemnant) {
+        // Draw remnant icon: small circle with "R"
+        pdf.setFillColor(113, 113, 122);
+        pdf.circle(margin + 2.5, currentY - 1.5, 2.5, 'F');
+        pdf.setTextColor(255, 255, 255);
+        pdf.setFont('helvetica', 'bold');
+        pdf.setFontSize(6);
+        pdf.text('R', margin + 2.5, currentY - 1.5, { align: 'center', baseline: 'middle' });
+        pdf.setFont('helvetica', 'normal');
+        pdf.setFontSize(10);
+        pdf.setTextColor(9, 9, 11);
+        titleX = margin + 8;
+      }
+      pdf.text(title, titleX, currentY);
       
       // Bar Details
       pdf.setFontSize(9);
@@ -313,9 +338,13 @@ export default function ResultsPanel({
 
   const renderBars = () => {
     const displayBars = isGroupedView ? groupBars(bars) : bars.map((b: any) => ({ ...b, count: 1 }));
-    if (isGroupedView && sortByCount) {
-      displayBars.sort((a: any, b: any) => b.count - a.count);
-    }
+    // Always sort remnants first, then apply secondary sort
+    displayBars.sort((a: any, b: any) => {
+      if (a.isRemnant && !b.isRemnant) return -1;
+      if (!a.isRemnant && b.isRemnant) return 1;
+      if (isGroupedView && sortByCount) return b.count - a.count;
+      return a.waste - b.waste;
+    });
     let displayBarCount = 0;
     let displayRemnantCount = 0;
     return displayBars.map((bar: any) => {
