@@ -43,6 +43,14 @@ import {
 import type { BuildingLike } from "./ProjectBuilder";
 import { usePiecePools } from "../hooks/usePiecePools";
 import ExportAllDialog from "../components/ExportAllDialog";
+import {
+  Select,
+  SelectTrigger,
+  SelectValue,
+  SelectContent,
+  SelectItem,
+} from "../components/ui/select";
+import { useIsMobile } from "../hooks/use-mobile";
 
 interface SizeGrid {
   [key: string]: { width: string; height: string };
@@ -82,6 +90,7 @@ export function OptimizationTab({
   const profileTypeLabel = useProfileTypeLabel();
   const { dispatch, state, getRGBForLength } = useApp();
   const { data: stockEntries } = useProjectStock(projectId);
+  const isMobile = useIsMobile();
 
   const [showExportDialog, setShowExportDialog] = useState(false);
 
@@ -678,52 +687,93 @@ export function OptimizationTab({
         </span>
       </div>
 
-      {/* Piece template group tabs */}
-      <div className="flex items-center justify-between">
-        <div className="inline-flex items-center gap-0.5 rounded-md bg-muted p-0.5">
-          {allGroups.map((g) => (
-            <button
-              key={g.pieceTemplateId}
-              type="button"
-              className={`px-3 py-1 text-xs font-medium rounded-md transition-all ${
-                activeGroupId === g.pieceTemplateId
-                  ? "bg-background text-foreground shadow-sm"
-                  : "text-muted-foreground hover:text-foreground"
-              }`}
-              onClick={() => setActiveGroupId(g.pieceTemplateId)}
-            >
-              {g.pieceTemplateName}
-            </button>
-          ))}
+      {/* Piece template group tabs + Profile type sub-tabs */}
+      {isMobile ? (
+        <div className="flex items-center gap-2">
+          <Select value={activeGroupId ?? undefined} onValueChange={(v) => v && setActiveGroupId(v)}>
+            <SelectTrigger className="h-8 text-xs flex-1 min-w-0">
+              <SelectValue>
+                {allGroups.find((g) => g.pieceTemplateId === activeGroupId)?.pieceTemplateName ?? "Select..."}
+              </SelectValue>
+            </SelectTrigger>
+            <SelectContent>
+              {allGroups.map((g) => (
+                <SelectItem key={g.pieceTemplateId} value={g.pieceTemplateId}>{g.pieceTemplateName}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          {poolsWithStock && poolsWithStock.length > 0 && (
+            <Select value={activeProfileType ?? undefined} onValueChange={(v) => v && setActiveProfileType(v)}>
+              <SelectTrigger className="h-8 text-xs flex-1 min-w-0">
+                <SelectValue>
+                  {poolsWithStock.find((p) => p.profileType === activeProfileType)
+                    ? `${profileTypeLabel(activeProfileType!)} (${poolsWithStock.find((p) => p.profileType === activeProfileType)!.pieces.reduce((s, pp) => s + pp.quantity, 0)} pcs)`
+                    : "Select..."}
+                </SelectValue>
+              </SelectTrigger>
+              <SelectContent>
+                {poolsWithStock.map((p) => (
+                  <SelectItem key={p.profileType} value={p.profileType}>
+                    {profileTypeLabel(p.profileType)}
+                    {p.stock.length === 0 && <span className="ml-1 text-amber-600">⚠</span>}
+                    <span className="ml-1 text-[10px] text-muted-foreground">
+                      {p.pieces.reduce((s, pp) => s + pp.quantity, 0)} pcs
+                    </span>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
         </div>
-      </div>
+      ) : (
+        <div className="flex items-center justify-between">
+          <div className="inline-flex items-center gap-0.5 rounded-md bg-muted p-0.5 shrink-0">
+            {allGroups.map((g) => (
+              <button
+                key={g.pieceTemplateId}
+                type="button"
+                className={`px-3 py-1 text-xs font-medium rounded-md transition-all ${
+                  activeGroupId === g.pieceTemplateId
+                    ? "bg-background text-foreground shadow-sm"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+                onClick={() => setActiveGroupId(g.pieceTemplateId)}
+              >
+                {g.pieceTemplateName}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Profile type sub-tabs + Optimize button */}
       {poolsWithStock && poolsWithStock.length > 0 && (
-        <div className="flex items-center justify-between gap-3">
-          <div className="flex items-center gap-2">
-            <div className="inline-flex items-center gap-0.5 rounded-md bg-muted p-0.5">
-              {poolsWithStock.map((p) => (
-                <button
-                  key={p.profileType}
-                  type="button"
-                  className={`px-3 py-1 text-xs font-medium rounded-md transition-all ${
-                    activeProfileType === p.profileType
-                      ? "bg-background text-foreground shadow-sm"
-                      : "text-muted-foreground hover:text-foreground"
-                  }`}
-                  onClick={() => setActiveProfileType(p.profileType)}
-                >
-                  {profileTypeLabel(p.profileType)}
-                  {p.stock.length === 0 && (
-                    <span className="ml-1 text-amber-600 dark:text-amber-400">⚠</span>
-                  )}
-                  <span className="ml-1 text-[10px] text-muted-foreground">
-                    {p.pieces.reduce((s, pp) => s + pp.quantity, 0)} pcs
-                  </span>
-                </button>
-              ))}
-            </div>
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+          <div className="flex items-center gap-2 flex-wrap">
+            {!isMobile && (
+              <div className="inline-flex items-center gap-0.5 rounded-md bg-muted p-0.5 shrink-0">
+                {poolsWithStock.map((p) => (
+                  <button
+                    key={p.profileType}
+                    type="button"
+                    className={`px-3 py-1 text-xs font-medium rounded-md transition-all ${
+                      activeProfileType === p.profileType
+                        ? "bg-background text-foreground shadow-sm"
+                        : "text-muted-foreground hover:text-foreground"
+                    }`}
+                    onClick={() => setActiveProfileType(p.profileType)}
+                  >
+                    {profileTypeLabel(p.profileType)}
+                    {p.stock.length === 0 && (
+                      <span className="ml-1 text-amber-600 dark:text-amber-400">⚠</span>
+                    )}
+                    <span className="ml-1 text-[10px] text-muted-foreground">
+                      {p.pieces.reduce((s, pp) => s + pp.quantity, 0)} pcs
+                    </span>
+                  </button>
+                ))}
+              </div>
+            )}
             {demandChanged && savedPlan && (
               <Badge
                 variant="outline"
@@ -732,7 +782,8 @@ export function OptimizationTab({
                   : "border-blue-500/40 text-blue-700 dark:text-blue-300 bg-blue-500/5 gap-1"}
               >
                 <HugeiconsIcon icon={AlertCircleIcon} size={12} />
-                {appliedPlan ? "Sizes changed — un-apply & re-optimize" : "Sizes changed — re-optimize"}
+                <span className="hidden sm:inline">{appliedPlan ? "Sizes changed — un-apply & re-optimize" : "Sizes changed — re-optimize"}</span>
+                <span className="sm:hidden">{appliedPlan ? "Sizes changed" : "Sizes changed"}</span>
               </Badge>
             )}
             {stockChanged && savedPlan && (
@@ -743,15 +794,16 @@ export function OptimizationTab({
                   : "border-blue-500/40 text-blue-700 dark:text-blue-300 bg-blue-500/5 gap-1"}
               >
                 <HugeiconsIcon icon={AlertCircleIcon} size={12} />
-                {appliedPlan ? "Stock changed — un-apply & re-optimize" : "Stock changed — re-optimize"}
+                <span className="hidden sm:inline">{appliedPlan ? "Stock changed — un-apply & re-optimize" : "Stock changed — re-optimize"}</span>
+                <span className="sm:hidden">{appliedPlan ? "Stock changed" : "Stock changed"}</span>
               </Badge>
             )}
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap md:flex-nowrap w-full md:w-auto">
             {savedPlan && !savedPlan.isApplied && !appliedPlan && (
               <Button
                 variant="ghost"
-                className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+                className="text-destructive hover:bg-destructive/10 hover:text-destructive flex-1 md:flex-none"
                 onClick={handleClearPlan}
                 disabled={deletePlanMutation.isPending}
                 title="Clear Plan"
@@ -761,6 +813,7 @@ export function OptimizationTab({
               </Button>
             )}
             <Button
+              className="flex-1 md:flex-none"
               onClick={handleOptimize}
               disabled={isOptimizing || !activePool || activePool.stock.length === 0 || !!appliedPlan}
               title={appliedPlan ? "Un-apply the current plan to re-optimize" : undefined}
@@ -775,6 +828,7 @@ export function OptimizationTab({
             {savedPlans && savedPlans.length > 0 && (
               <Button
                 variant="outline"
+                className="flex-1 md:flex-none"
                 onClick={() => setShowExportDialog(true)}
                 title="Export all saved plans as PDF"
               >
@@ -855,7 +909,7 @@ export function OptimizationTab({
 
       {/* Summary stats before optimization */}
       {activePool && !state.isOptimized && activePool.stock.length > 0 && stockCheck && !savedPlan && (
-        <div className="flex items-center gap-3 text-xs text-muted-foreground">
+        <div className="flex items-center gap-3 text-xs text-muted-foreground flex-wrap">
           <span><strong className="text-foreground">{activePool.pieces.reduce((s, p) => s + p.quantity, 0)}</strong> pieces</span>
           <span>·</span>
           <span><strong className="text-foreground">{activePool.stock.length}</strong> stock types</span>

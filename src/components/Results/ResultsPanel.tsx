@@ -497,7 +497,7 @@ export default function ResultsPanel({
     <DndContext onDragStart={handleDragStart} onDragEnd={handleDragEnd} collisionDetection={pointerWithin}>
       <div className="space-y-3">
         {/* Summary Stats */}
-        <div className={`grid grid-cols-2 ${estimatedCost !== null ? 'md:grid-cols-4' : 'md:grid-cols-3'} rounded-lg bg-card ring-1 ring-foreground/10 divide-x divide-y md:divide-y-0 overflow-hidden`}>
+        <div className={`grid grid-cols-2 ${estimatedCost !== null ? 'sm:grid-cols-4' : 'sm:grid-cols-3'} rounded-lg bg-card ring-1 ring-foreground/10 divide-x divide-y sm:divide-y-0 overflow-hidden`}>
           <StatItem
             icon={<HugeiconsIcon icon={PackageIcon} size={13} className="text-blue-500 dark:text-blue-400" />}
             label="Total Bars"
@@ -534,11 +534,11 @@ export default function ResultsPanel({
 
       {/* Cutting Diagram */}
         <Card id="cutting-plan-printable">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0">
-            <CardTitle className="flex items-center gap-1.5">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 gap-2">
+            <CardTitle className="flex items-center gap-1.5 shrink-0">
               <HugeiconsIcon icon={ScissorIcon} size={14} /> Cutting Plan
             </CardTitle>
-            <div className="flex items-center gap-1 no-print">
+            <div className="flex items-center gap-1 no-print flex-wrap">
               {applyProps && applyProps.isSaving && (
                 <span className="text-xs text-muted-foreground animate-pulse">Saving...</span>
               )}
@@ -551,7 +551,7 @@ export default function ResultsPanel({
                     disabled={applyProps.isUnapplying}
                     className="w-[85px]"
                   >
-                    {applyProps.isUnapplying ? 'Restoring...' : 'Un-apply'}
+                    {applyProps.isUnapplying ? '...' : 'Un-apply'}
                   </Button>
                 ) : (
                   <Button
@@ -560,13 +560,13 @@ export default function ResultsPanel({
                     disabled={applyProps.isApplying}
                     className="w-[85px]"
                   >
-                    {applyProps.isApplying ? 'Applying...' : 'Apply'}
+                    {applyProps.isApplying ? '...' : 'Apply'}
                   </Button>
                 )
               )}
               <DropdownMenu>
                 <DropdownMenuTrigger className={buttonVariants({ variant: "ghost", size: "sm" })}>
-                  <HugeiconsIcon icon={FileDownloadIcon} size={13} /> Export
+                  <HugeiconsIcon icon={FileDownloadIcon} size={13} /> <span className="hidden sm:inline">Export</span>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
                   <DropdownMenuItem onClick={handlePrint}>
@@ -594,20 +594,20 @@ export default function ResultsPanel({
 
       {isFullscreen && createPortal(
         <div className="fixed inset-0 z-50 bg-background flex flex-col">
-          <div className="flex items-center justify-between px-4 py-3 border-b">
-            <div className="flex items-center gap-2">
+          <div className="flex items-center justify-between px-4 py-3 border-b gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
               <HugeiconsIcon icon={ScissorIcon} size={16} />
               <span className="font-medium">Cutting Plan</span>
               {summary && (
-                <span className="text-xs text-muted-foreground ml-2">
+                <span className="text-xs text-muted-foreground">
                   {summary.totalBars} bars · {summary.totalWastePercent}% waste
                 </span>
               )}
             </div>
-            <div className="flex items-center gap-1">
+            <div className="flex items-center gap-1 shrink-0">
               <DropdownMenu>
                 <DropdownMenuTrigger className={buttonVariants({ variant: "ghost", size: "sm" })}>
-                  <HugeiconsIcon icon={FileDownloadIcon} size={13} /> Export
+                  <HugeiconsIcon icon={FileDownloadIcon} size={13} /> <span className="hidden sm:inline">Export</span>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
                   <DropdownMenuItem onClick={handlePrint}>

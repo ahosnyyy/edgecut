@@ -144,8 +144,8 @@ export default function ApartmentTemplateManager() {
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
-      <div className="flex items-center justify-between gap-3 px-4 py-3 shrink-0">
-        <div className="flex items-center gap-2">
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 px-4 py-3 shrink-0">
+        <div className="flex items-center gap-2 shrink-0">
           <h1 className="text-lg font-semibold">Apartment Types</h1>
           {templates && templates.length > 0 && (
             <Badge variant="secondary" className="text-xs">
@@ -153,8 +153,8 @@ export default function ApartmentTemplateManager() {
             </Badge>
           )}
         </div>
-        <div className="flex items-center gap-2">
-          <div className="relative">
+        <div className="flex items-center gap-2 flex-wrap">
+          <div className="relative flex-1 md:flex-none md:w-48 min-w-[140px]">
             <HugeiconsIcon
               icon={Search01Icon}
               size={14}
@@ -164,14 +164,14 @@ export default function ApartmentTemplateManager() {
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Search by name..."
-              className="w-48 pl-7 text-xs"
+              className="w-full pl-7 h-8 text-xs"
             />
           </div>
           <Select
             value={filterOpenings}
             onValueChange={(v) => setFilterOpenings(v ?? "all")}
           >
-            <SelectTrigger className="w-36 h-8 text-xs gap-1.5">
+            <SelectTrigger className="w-36 h-8 text-xs gap-1.5 shrink-0">
               <HugeiconsIcon icon={FilterIcon} size={14} className="text-muted-foreground" />
               <SelectValue>
                 {filterOpenings === "all"
@@ -259,7 +259,7 @@ export default function ApartmentTemplateManager() {
                         <Button
                           variant="ghost"
                           size="sm"
-                          className="h-6 w-6 p-0 text-muted-foreground hover:text-foreground opacity-0 group-hover:opacity-100"
+                          className="h-6 w-6 p-0 text-muted-foreground hover:text-foreground opacity-100 md:opacity-0 md:group-hover:opacity-100"
                           onClick={(e) => { e.stopPropagation(); handleEdit(tpl.id); }}
                         >
                           <HugeiconsIcon icon={PencilEdit01Icon} size={13} />
@@ -270,7 +270,7 @@ export default function ApartmentTemplateManager() {
                             <Button
                               variant="ghost"
                               size="sm"
-                              className="h-6 w-6 p-0 text-muted-foreground hover:text-destructive opacity-0 group-hover:opacity-100"
+                              className="h-6 w-6 p-0 text-muted-foreground hover:text-destructive opacity-100 md:opacity-0 md:group-hover:opacity-100"
                             >
                               <HugeiconsIcon icon={Delete02Icon} size={13} />
                             </Button>
@@ -431,7 +431,7 @@ function ApartmentTemplateEditor({
         </DialogHeader>
 
         <div className="flex flex-col gap-3 flex-1 min-h-0">
-          <div className="grid grid-cols-2 gap-3 shrink-0">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 shrink-0">
             <div className="flex flex-col gap-1.5">
               <Label htmlFor="apt-name">Name <span className="text-red-500">*</span></Label>
               <Input
@@ -472,51 +472,55 @@ function ApartmentTemplateEditor({
 
             <div className="flex flex-col gap-1.5 overflow-y-auto pr-1">
               {form.openings.map((o, i) => (
-                <div key={i} className="flex items-center gap-2 rounded-md border bg-muted/30 px-2 py-1.5">
-                  <span className="text-[10px] text-muted-foreground w-4 shrink-0 text-center font-medium">{i + 1}</span>
-                  <Input
-                    value={o.label}
-                    onChange={(e) => updateOpening(i, "label", e.target.value)}
-                    placeholder="Opening label"
-                    className="text-xs h-7 border-0 bg-background flex-1"
-                  />
-                  <Select
-                    value={o.pieceTemplateId}
-                    onValueChange={(v: string | null) => updateOpening(i, "pieceTemplateId", v ?? "")}
-                  >
-                    <SelectTrigger className="text-xs h-7 w-56 border-0 bg-background shrink-0">
-                      <SelectValue placeholder="Template...">
-                        {pieceTemplates?.find((t) => t.id === o.pieceTemplateId)?.name ?? "Template..."}
-                      </SelectValue>
-                    </SelectTrigger>
-                    <SelectContent>
-                      {pieceTemplates?.map((t) => {
-                        const sysName = t.profileSystemId
-                          ? profileSystemsList?.find((s) => s.id === t.profileSystemId)?.name
-                          : null;
-                        return (
-                          <SelectItem key={t.id} value={t.id}>
-                            <span className="flex items-center gap-2">
-                              {t.name}
-                              {sysName && (
-                                <Badge variant="outline" className="text-[9px] h-3.5 px-1 py-0">
-                                  {sysName}
-                                </Badge>
-                              )}
-                            </span>
-                          </SelectItem>
-                        );
-                      })}
-                    </SelectContent>
-                  </Select>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-6 w-6 text-muted-foreground hover:text-destructive shrink-0"
-                    onClick={() => removeOpening(i)}
-                  >
-                    <HugeiconsIcon icon={Delete02Icon} size={12} />
-                  </Button>
+                <div key={i} className="flex flex-col sm:flex-row sm:items-center gap-2 rounded-md border bg-muted/30 px-2 py-1.5">
+                  <div className="flex items-center gap-2 flex-1 min-w-0">
+                    <span className="text-[10px] text-muted-foreground w-4 shrink-0 text-center font-medium">{i + 1}</span>
+                    <Input
+                      value={o.label}
+                      onChange={(e) => updateOpening(i, "label", e.target.value)}
+                      placeholder="Opening label"
+                      className="text-xs h-7 border-0 bg-background flex-1"
+                    />
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Select
+                      value={o.pieceTemplateId}
+                      onValueChange={(v: string | null) => updateOpening(i, "pieceTemplateId", v ?? "")}
+                    >
+                      <SelectTrigger className="text-xs h-7 w-full sm:w-56 border-0 bg-background shrink-0">
+                        <SelectValue placeholder="Template...">
+                          {pieceTemplates?.find((t) => t.id === o.pieceTemplateId)?.name ?? "Template..."}
+                        </SelectValue>
+                      </SelectTrigger>
+                      <SelectContent>
+                        {pieceTemplates?.map((t) => {
+                          const sysName = t.profileSystemId
+                            ? profileSystemsList?.find((s) => s.id === t.profileSystemId)?.name
+                            : null;
+                          return (
+                            <SelectItem key={t.id} value={t.id}>
+                              <span className="flex items-center gap-2">
+                                {t.name}
+                                {sysName && (
+                                  <Badge variant="outline" className="text-[9px] h-3.5 px-1 py-0">
+                                    {sysName}
+                                  </Badge>
+                                )}
+                              </span>
+                            </SelectItem>
+                          );
+                        })}
+                      </SelectContent>
+                    </Select>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-6 w-6 text-muted-foreground hover:text-destructive shrink-0"
+                      onClick={() => removeOpening(i)}
+                    >
+                      <HugeiconsIcon icon={Delete02Icon} size={12} />
+                    </Button>
+                  </div>
                 </div>
               ))}
               {form.openings.length === 0 && (

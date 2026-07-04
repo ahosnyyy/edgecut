@@ -246,7 +246,7 @@ export default function TemplateManager({
                         <Button
                           variant="ghost"
                           size="sm"
-                          className="h-6 w-6 p-0 text-muted-foreground hover:text-foreground opacity-0 group-hover:opacity-100"
+                          className="h-6 w-6 p-0 text-muted-foreground hover:text-foreground opacity-100 md:opacity-0 md:group-hover:opacity-100"
                           onClick={(e) => { e.stopPropagation(); handleEdit(tpl.id); }}
                         >
                           <HugeiconsIcon icon={PencilEdit01Icon} size={13} />
@@ -258,7 +258,7 @@ export default function TemplateManager({
                               <Button
                                 variant="ghost"
                                 size="sm"
-                                className="h-6 w-6 p-0 text-muted-foreground hover:text-destructive opacity-0 group-hover:opacity-100"
+                                className="h-6 w-6 p-0 text-muted-foreground hover:text-destructive opacity-100 md:opacity-0 md:group-hover:opacity-100"
                               >
                                 <HugeiconsIcon icon={Delete02Icon} size={13} />
                               </Button>

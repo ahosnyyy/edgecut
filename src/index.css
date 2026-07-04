@@ -169,6 +169,17 @@ input[type="number"] {
   background: hsl(var(--muted-foreground) / 0.5);
 }
 
+/* ---------- Mobile responsiveness ---------- */
+html, body {
+  overscroll-behavior-x: none;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Prevent horizontal overflow from wide content */
+body {
+  overflow-x: hidden;
+}
+
 /* ---------- Print ---------- */
 @media print {
   body {

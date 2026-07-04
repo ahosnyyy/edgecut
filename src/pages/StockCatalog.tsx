@@ -81,8 +81,8 @@ export default function StockCatalog() {
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
-      <div className="flex items-center justify-between gap-3 px-4 py-3 shrink-0">
-        <div className="flex items-center gap-2">
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 px-4 py-3 shrink-0">
+        <div className="flex items-center gap-2 shrink-0">
           <h1 className="text-lg font-semibold">Stock Catalog</h1>
           {entries && entries.length > 0 && (
             <Badge variant="secondary" className="text-xs">
@@ -90,8 +90,8 @@ export default function StockCatalog() {
             </Badge>
           )}
         </div>
-        <div className="flex items-center gap-2">
-          <div className="relative">
+        <div className="flex items-center gap-2 flex-wrap">
+          <div className="relative flex-1 md:flex-none md:w-48 min-w-[140px]">
             <HugeiconsIcon
               icon={Search01Icon}
               size={14}
@@ -101,14 +101,14 @@ export default function StockCatalog() {
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Search catalog..."
-              className="w-48 pl-7 text-xs"
+              className="w-full pl-7 h-8 text-xs"
             />
           </div>
           <Select
             value={filterSystem}
             onValueChange={(v) => setFilterSystem((v ?? "all") as "all" | "manazil" | "premier")}
           >
-            <SelectTrigger className="w-32 h-8 text-xs gap-1.5">
+            <SelectTrigger className="w-32 h-8 text-xs gap-1.5 shrink-0">
               <HugeiconsIcon icon={FilterIcon} size={14} className="text-muted-foreground" />
               <SelectValue>
                 {filterSystem === "all" ? "All" : filterSystem === "manazil" ? "Manazil" : "Premier"}
@@ -190,7 +190,7 @@ export default function StockCatalog() {
                         <Button
                           variant="ghost"
                           size="sm"
-                          className="h-6 w-6 p-0 text-muted-foreground hover:text-foreground opacity-0 group-hover:opacity-100"
+                          className="h-6 w-6 p-0 text-muted-foreground hover:text-foreground opacity-100 md:opacity-0 md:group-hover:opacity-100"
                           onClick={() => setEditing(entry)}
                         >
                           <HugeiconsIcon icon={PencilEdit01Icon} size={13} />
@@ -200,7 +200,7 @@ export default function StockCatalog() {
                             <Button
                               variant="ghost"
                               size="sm"
-                              className="h-6 w-6 p-0 text-muted-foreground hover:text-destructive opacity-0 group-hover:opacity-100"
+                              className="h-6 w-6 p-0 text-muted-foreground hover:text-destructive opacity-100 md:opacity-0 md:group-hover:opacity-100"
                             >
                               <HugeiconsIcon icon={Delete02Icon} size={13} />
                             </Button>
@@ -275,7 +275,7 @@ export default function StockCatalog() {
                       )}
                       <div className="flex items-center gap-2">
                         {entry.quantity !== -1 && (
-                          <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <div className="flex items-center gap-1 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
                             <input
                               type="number"
                               min={1}
@@ -398,7 +398,7 @@ function StockCatalogDialog({
           <DialogTitle>{entry ? "Edit Catalog Entry" : "New Catalog Entry"}</DialogTitle>
         </DialogHeader>
         <div className="flex flex-col gap-3">
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div className="flex flex-col gap-1.5">
               <Label>Profile System</Label>
               <Select
@@ -441,7 +441,7 @@ function StockCatalogDialog({
               placeholder="e.g. Standard 6m White"
             />
           </div>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div className="flex flex-col gap-1.5">
               <Label htmlFor="sd-length">Length ({unitLabel})</Label>
               <Input

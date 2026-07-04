@@ -60,7 +60,7 @@ function AppBreadcrumbs() {
         crumbs.push({ label: seg.length > 8 ? `${seg.slice(0, 8)}…` : seg, path: currentPath });
       }
     } else if (buildingId && i === 3) {
-      const building = project?.buildings?.find((b) => b.id === buildingId);
+      const building = project?.buildings?.find((b) => b.id === buildingId || b.slug === buildingId);
       crumbs.push({ label: building?.name ?? (projectLoading ? "…" : "Building"), path: currentPath });
     } else if (i === segments.length - 1 && crumbs.length > 0) {
       if (projectId && project?.name) {
@@ -78,9 +78,19 @@ function AppBreadcrumbs() {
 
   if (crumbs.length === 0) return null;
 
+  // On mobile, show only the last crumb as a page title
+  const mobileTitle = crumbs.length > 0 ? crumbs[crumbs.length - 1].label : null;
+
   return (
     <Breadcrumb>
       <BreadcrumbList>
+        {/* Mobile: show only last crumb */}
+        {mobileTitle && (
+          <BreadcrumbItem className="md:hidden">
+            <BreadcrumbPage className="truncate max-w-[40vw]">{mobileTitle}</BreadcrumbPage>
+          </BreadcrumbItem>
+        )}
+        {/* Desktop: full breadcrumb trail */}
         {crumbs.map((crumb, index) => {
           const isLast = index === crumbs.length - 1;
           return (
@@ -99,14 +109,14 @@ function AppBreadcrumbs() {
           );
         })}
         {(() => {
-          const building = buildingId ? project?.buildings?.find((b) => b.id === buildingId) : null;
+          const building = buildingId ? project?.buildings?.find((b) => b.id === buildingId || b.slug === buildingId) : null;
           const status = building?.status ?? project?.status;
           if (!status) return null;
           return (
             <Badge
               variant="secondary"
               className={
-                "text-[10px] px-1.5 py-0 h-4 ml-1 " +
+                "text-[10px] px-1.5 py-0 h-4 ml-1 shrink-0 " +
                 (status === "active"
                   ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400"
                   : status === "completed"
@@ -160,16 +170,18 @@ function ThemeToggle() {
 function HeaderBar() {
   const { actions } = useHeaderActions();
   return (
-    <header className="flex h-10 shrink-0 items-center gap-2 border-b transition-[width,height] ease-linear group-has-data-[collapsible=icon]/sidebar-wrapper:h-10">
-      <div className="flex items-center gap-2 px-4">
-        <SidebarTrigger className="-ml-1" />
+    <header className="flex h-12 md:h-10 shrink-0 items-center gap-2 border-b transition-[width,height] ease-linear group-has-data-[collapsible=icon]/sidebar-wrapper:h-10">
+      <div className="flex items-center gap-2 px-3 md:px-4 min-w-0">
+        <SidebarTrigger className="-ml-1 shrink-0" />
         <Separator
           orientation="vertical"
-          className="mr-2 data-vertical:self-center data-vertical:h-4"
+          className="mr-2 data-vertical:self-center data-vertical:h-4 hidden md:flex"
         />
-        <AppBreadcrumbs />
+        <div className="min-w-0 overflow-hidden">
+          <AppBreadcrumbs />
+        </div>
       </div>
-      <div className="ml-auto flex items-center gap-2 pr-4">
+      <div className="ml-auto flex items-center gap-1.5 md:gap-2 pr-3 md:pr-4 shrink-0">
         <ThemeToggle />
         {actions.map((action, i) => (
           <div key={i}>{action}</div>
@@ -187,7 +199,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
           <AppSidebar />
           <SidebarInset className="overflow-hidden">
             <HeaderBar />
-            <div className="flex flex-1 flex-col min-h-0 overflow-hidden">
+            <div className="flex flex-1 flex-col min-h-0 overflow-y-auto overflow-x-hidden">
               {children}
             </div>
           </SidebarInset>

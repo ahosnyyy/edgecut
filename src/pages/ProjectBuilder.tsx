@@ -94,6 +94,7 @@ import { useProfileSystems, type SystemConstant } from "../hooks/useProfileSyste
 import { generatePieces, type TemplateVariable } from "../engine/pieceGenerator";
 import { useProfileTypes } from "../hooks/useProfileTypes";
 import { OptimizationTab } from "./OptimizationTab";
+import { useIsMobile } from "../hooks/use-mobile";
 
 function useProfileTypeLabel() {
   const { data: profileTypes } = useProfileTypes();
@@ -213,13 +214,13 @@ export default function ProjectBuilder() {
       <div className="flex items-center gap-2 px-4 py-3 shrink-0">
         <h1 className="text-lg font-semibold truncate">{project.name}</h1>
         {project.client && (
-          <span className="text-sm text-muted-foreground truncate">· {project.client}</span>
+          <span className="text-sm text-muted-foreground truncate hidden sm:inline">· {project.client}</span>
         )}
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col min-h-0">
-        <div className="flex items-center justify-between gap-3 px-4 py-3 shrink-0">
-          <div className="flex items-center gap-2">
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 px-4 py-3 shrink-0">
+          <div className="flex items-center gap-2 shrink-0">
             <TabsList>
               <TabsTrigger value="buildings">
                 <HugeiconsIcon icon={BuildingIcon} size={14} />
@@ -238,9 +239,9 @@ export default function ProjectBuilder() {
             </TabsList>
           </div>
 
-          <TabsContent value="buildings" className="flex-1">
-            <div className="flex items-center justify-end gap-2">
-              <div className="relative">
+          <TabsContent value="buildings" className="md:flex-none">
+            <div className="flex items-center gap-2 flex-wrap">
+              <div className="relative flex-1 md:flex-none md:w-44 min-w-[140px]">
                 <HugeiconsIcon
                   icon={Search01Icon}
                   size={14}
@@ -250,14 +251,14 @@ export default function ProjectBuilder() {
                   value={buildingSearch}
                   onChange={(e) => setBuildingSearch(e.target.value)}
                   placeholder="Search buildings..."
-                  className="w-44 pl-7 h-8 text-xs"
+                  className="w-full pl-7 h-8 text-xs"
                 />
               </div>
               <Select
                 value={buildingFilterStatus}
                 onValueChange={(v) => setBuildingFilterStatus(v ?? "all")}
               >
-                <SelectTrigger className="w-32 h-8 text-xs gap-1.5">
+                <SelectTrigger className="w-32 h-8 text-xs gap-1.5 shrink-0">
                   <HugeiconsIcon icon={FilterIcon} size={14} className="text-muted-foreground" />
                   <SelectValue>
                     {buildingFilterStatus === "all" ? "All Status" : buildingFilterStatus.charAt(0).toUpperCase() + buildingFilterStatus.slice(1)}
@@ -273,9 +274,9 @@ export default function ProjectBuilder() {
             </div>
           </TabsContent>
 
-          <TabsContent value="stock" className="flex-1">
-            <div className="flex items-center justify-end gap-2">
-              <div className="relative">
+          <TabsContent value="stock" className="md:flex-none">
+            <div className="flex items-center gap-2 flex-wrap">
+              <div className="relative flex-1 md:flex-none md:w-44 min-w-[140px]">
                 <HugeiconsIcon
                   icon={Search01Icon}
                   size={14}
@@ -285,14 +286,14 @@ export default function ProjectBuilder() {
                   value={stockSearch}
                   onChange={(e) => setStockSearch(e.target.value)}
                   placeholder="Search stock..."
-                  className="w-44 pl-7 h-8 text-xs"
+                  className="w-full pl-7 h-8 text-xs"
                 />
               </div>
               <Select
                 value={stockFilterSystem}
                 onValueChange={(v) => setStockFilterSystem(v ?? "all")}
               >
-                <SelectTrigger className="w-28 h-8 text-xs gap-1.5">
+                <SelectTrigger className="w-28 h-8 text-xs gap-1.5 shrink-0">
                   <HugeiconsIcon icon={FilterIcon} size={14} className="text-muted-foreground" />
                   <SelectValue>
                     {stockFilterSystem === "all" ? "All Systems" : stockFilterSystem.charAt(0).toUpperCase() + stockFilterSystem.slice(1)}
@@ -309,7 +310,7 @@ export default function ProjectBuilder() {
                 value={stockFilterType}
                 onValueChange={(v) => setStockFilterType(v ?? "all")}
               >
-                <SelectTrigger className="w-32 h-8 text-xs gap-1.5">
+                <SelectTrigger className="w-32 h-8 text-xs gap-1.5 shrink-0">
                   <HugeiconsIcon icon={FilterIcon} size={14} className="text-muted-foreground" />
                   <SelectValue>
                     {stockFilterType === "all" ? "All Types" : profileTypeLabel(stockFilterType)}
@@ -574,7 +575,7 @@ function StockManagement({ projectId, profileSystems, search, setSearch, filterT
 
   return (
     <div className="flex flex-col gap-3">
-      <div className="flex items-center justify-between gap-2">
+      <div className="flex items-center justify-between gap-2 flex-wrap">
         <div className="inline-flex items-center gap-0.5 rounded-md bg-muted p-0.5 w-fit">
           <button
             className={`px-3 py-1 text-xs font-medium rounded-md transition-all ${
@@ -665,7 +666,7 @@ function StockManagement({ projectId, profileSystems, search, setSearch, filterT
                       <Button
                         variant="ghost"
                         size="sm"
-                        className="h-6 w-6 p-0 text-muted-foreground hover:text-destructive opacity-0 group-hover:opacity-100"
+                        className="h-6 w-6 p-0 text-muted-foreground hover:text-destructive opacity-100 md:opacity-0 md:group-hover:opacity-100"
                       >
                         <HugeiconsIcon icon={Delete02Icon} size={13} />
                       </Button>
@@ -738,7 +739,7 @@ function StockManagement({ projectId, profileSystems, search, setSearch, filterT
                     )}
                   </div>
                   {entry.quantity !== -1 && (
-                    <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <div className="flex items-center gap-1 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity shrink-0">
                       <input
                         type="number"
                         min={1}
@@ -872,7 +873,7 @@ function StockManagement({ projectId, profileSystems, search, setSearch, filterT
 
               {effectiveMode === "custom" && (
                 <>
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div className="flex flex-col gap-1.5">
                       <Label>Profile System <span className="text-red-500">*</span></Label>
                       <Select
@@ -919,7 +920,7 @@ function StockManagement({ projectId, profileSystems, search, setSearch, filterT
                 </>
               )}
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div className="flex flex-col gap-1.5">
                   <Label htmlFor="ns-length">
                     Length ({unitLabel})
@@ -1017,24 +1018,24 @@ function ProjectSettings({
   const navigate = useNavigate();
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex items-stretch gap-4">
+      <div className="flex flex-col lg:flex-row items-stretch gap-4">
         <Card className="flex-1">
           <CardHeader>
             <CardTitle className="text-sm">General</CardTitle>
             <CardDescription className="text-xs">Basic project information and status.</CardDescription>
           </CardHeader>
           <CardContent className="flex flex-col gap-4">
-            <div className="grid grid-cols-[80px_1fr] items-center gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-[80px_1fr] items-center gap-3">
               <Label htmlFor="p-name" className="text-xs text-muted-foreground">Name</Label>
               <Input id="p-name" value={name} onChange={(e) => onNameChange(e.target.value)} className="h-7 " />
             </div>
             <Separator />
-            <div className="grid grid-cols-[80px_1fr] items-center gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-[80px_1fr] items-center gap-3">
               <Label htmlFor="p-client" className="text-xs text-muted-foreground">Client</Label>
               <Input id="p-client" value={client} onChange={(e) => onClientChange(e.target.value)} className="h-7 " />
             </div>
             <Separator />
-            <div className="grid grid-cols-[80px_1fr] items-center gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-[80px_1fr] items-center gap-3">
               <Label className="text-xs text-muted-foreground">Status</Label>
               <div className="flex items-center gap-2">
                 <Badge
@@ -1056,7 +1057,7 @@ function ProjectSettings({
               </div>
             </div>
             <Separator />
-            <div className="grid grid-cols-[80px_1fr] items-center gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-[80px_1fr] items-center gap-3">
               <Label className="text-xs text-muted-foreground">Profile</Label>
               <div className="flex flex-col gap-1">
                 <Combobox
@@ -1108,7 +1109,7 @@ function ProjectSettings({
             <CardDescription className="text-xs">Cutting optimizer settings for this project.</CardDescription>
           </CardHeader>
           <CardContent className="flex flex-col gap-4">
-            <div className="grid grid-cols-[80px_1fr] items-center gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-[80px_1fr] items-center gap-3">
               <Label className="text-xs text-muted-foreground">Unit</Label>
               <div className="flex items-center justify-between">
                 <span className="text-xs text-foreground">{unitLabel}</span>
@@ -1116,7 +1117,7 @@ function ProjectSettings({
               </div>
             </div>
             <Separator />
-            <div className="grid grid-cols-[80px_1fr] items-center gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-[80px_1fr] items-center gap-3">
               <Label htmlFor="p-kerf" className="text-xs text-muted-foreground">Kerf Width</Label>
               <div className="flex items-center gap-2">
                 <Input
@@ -1140,7 +1141,7 @@ function ProjectSettings({
               </div>
             </div>
             <Separator />
-            <div className="grid grid-cols-[80px_1fr] items-center gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-[80px_1fr] items-center gap-3">
               <Label className="text-xs text-muted-foreground">Goal</Label>
               <div className="flex items-center gap-2">
                 <Select
@@ -1186,7 +1187,7 @@ function ProjectSettings({
         </CardHeader>
         <CardContent>
           <div className="flex flex-col gap-3">
-            <div className="flex items-center justify-between gap-3">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div className="flex flex-col gap-0.5">
                 <span className="text-xs font-medium">Archive this project</span>
                 <span className="text-xs text-muted-foreground">Mark all buildings as archived and hide from active lists.</span>
@@ -1207,7 +1208,7 @@ function ProjectSettings({
               />
             </div>
             <Separator />
-            <div className="flex items-center justify-between gap-3">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div className="flex flex-col gap-0.5">
                 <span className="text-xs font-medium">Delete this project</span>
                 <span className="text-xs text-muted-foreground">All buildings, assignments, and piece pools will be lost.</span>
@@ -1260,11 +1261,37 @@ export function BuildingDetail({
   const setSubTab = (v: string) => {
     setSearchParams(v === "assignments" ? {} : { tab: v }, { replace: true });
   };
+  const isMobile = useIsMobile();
+
+  const tabOptions = [
+    { value: "assignments", label: "Floor Assignments", icon: AssignmentsIcon },
+    { value: "sizes", label: "Opening Sizes", icon: RulerIcon },
+    { value: "pieces", label: "Piece Pools", icon: PuzzleIcon },
+    { value: "optimization", label: "Optimization", icon: ScissorIcon },
+    { value: "settings", label: "Settings", icon: Settings01Icon },
+  ];
 
   return (
-    <div className="flex flex-col gap-3">
+    <div className="flex flex-col gap-3 min-w-0">
       <Tabs key={subTab} value={subTab} onValueChange={setSubTab}>
-        <div className="flex items-center justify-between gap-3">
+        {isMobile ? (
+          <Select value={subTab} onValueChange={(v) => v && setSubTab(v)}>
+            <SelectTrigger className="h-8 text-xs w-full">
+              <HugeiconsIcon icon={tabOptions.find((t) => t.value === subTab)?.icon ?? AssignmentsIcon} size={14} className="text-muted-foreground" />
+              <SelectValue>
+                {tabOptions.find((t) => t.value === subTab)?.label ?? "Floor Assignments"}
+              </SelectValue>
+            </SelectTrigger>
+            <SelectContent>
+              {tabOptions.map((t) => (
+                <SelectItem key={t.value} value={t.value}>
+                  <HugeiconsIcon icon={t.icon} size={14} className="mr-1.5" />
+                  {t.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        ) : (
           <div className="flex items-center gap-2">
             <TabsList>
               <TabsTrigger value="assignments">
@@ -1291,7 +1318,7 @@ export function BuildingDetail({
               </TabsTrigger>
             </TabsList>
           </div>
-        </div>
+        )}
         <TabsContent value="assignments" className="mt-3">
           <FloorAssignments
             projectId={projectId}
@@ -1632,9 +1659,9 @@ function BuildingsManager({
                   </CardDescription>
                 </CardHeader>
                 <CardFooter className="bg-muted/50 py-2.5">
-                  <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
+                  <div className="flex items-center gap-2 text-[10px] text-muted-foreground flex-wrap">
                     <span>{b.floors * b.apartmentsPerFloor} apartments</span>
-                    <Separator orientation="vertical" className="my-0.5" />
+                    <Separator orientation="vertical" className="my-0.5 hidden sm:block" />
                     <span>Created {new Date(b.createdAt).toLocaleDateString("en-GB")}</span>
                   </div>
                 </CardFooter>
@@ -1655,7 +1682,7 @@ function BuildingsManager({
                 <Label htmlFor="nb-name">Name</Label>
                 <Input id="nb-name" value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="e.g. Tower B" />
               </div>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div className="flex flex-col gap-1.5">
                   <Label htmlFor="nb-floors">Floors</Label>
                   <Input id="nb-floors" type="number" min={1} value={newFloors}
@@ -1793,9 +1820,9 @@ function FloorAssignments({
 
   return (
     <div className="flex flex-col gap-3">
-      <div className="flex items-center justify-between gap-2">
-        <div className="flex items-center gap-2">
-          <div className="flex items-center gap-1">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
+          <div className="flex items-center gap-1 shrink-0">
             <Button variant="outline" size="icon" onClick={onPrev} disabled={!hasPrev}>
               <HugeiconsIcon icon={ArrowLeft01Icon} />
             </Button>
@@ -1808,7 +1835,7 @@ function FloorAssignments({
             {building.floors} floors × {building.apartmentsPerFloor} apts · {building.floors * building.apartmentsPerFloor} total
           </span>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 shrink-0">
           <Select value={fillAllValue} onValueChange={(v: string | null) => v && handleFillAll(v)}>
             <SelectTrigger className="w-40 h-7 text-xs">
               <span className="text-muted-foreground">Fill all...</span>
@@ -1918,6 +1945,7 @@ function OpeningSizes({
 }) {
   const saveMutation = useSaveOpeningSizes();
   const { fromMM: convertFromMM, toMM: convertToMM, unitLabel } = useSettings();
+  const isMobile = useIsMobile();
   const floors = building.floors;
   const apartmentsPerFloor = building.apartmentsPerFloor;
   let floorLabels: string[] = [];
@@ -2144,22 +2172,37 @@ function OpeningSizes({
           onFillBucket={handleFillBucket}
           onClearAll={handleClearAll}
           groupChips={
-            <div className="inline-flex items-center gap-0.5 rounded-md bg-muted p-0.5">
-              {allGroups.map((g) => (
-                <button
-                  key={g.pieceTemplateId}
-                  type="button"
-                  className={`px-3 py-1 text-xs font-medium rounded-md transition-all ${
-                    activeGroupId === g.pieceTemplateId
-                      ? "bg-background text-foreground shadow-sm"
-                      : "text-muted-foreground hover:text-foreground"
-                  }`}
-                  onClick={() => setActiveGroupId(g.pieceTemplateId)}
-                >
-                  {g.pieceTemplateName}
-                </button>
-              ))}
-            </div>
+            isMobile ? (
+              <Select value={activeGroupId ?? undefined} onValueChange={(v) => v && setActiveGroupId(v)}>
+                <SelectTrigger className="h-8 text-xs w-full">
+                  <SelectValue>
+                    {allGroups.find((g) => g.pieceTemplateId === activeGroupId)?.pieceTemplateName ?? "Select..."}
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  {allGroups.map((g) => (
+                    <SelectItem key={g.pieceTemplateId} value={g.pieceTemplateId}>{g.pieceTemplateName}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            ) : (
+              <div className="inline-flex items-center gap-0.5 rounded-md bg-muted p-0.5">
+                {allGroups.map((g) => (
+                  <button
+                    key={g.pieceTemplateId}
+                    type="button"
+                    className={`px-3 py-1 text-xs font-medium rounded-md transition-all ${
+                      activeGroupId === g.pieceTemplateId
+                        ? "bg-background text-foreground shadow-sm"
+                        : "text-muted-foreground hover:text-foreground"
+                    }`}
+                    onClick={() => setActiveGroupId(g.pieceTemplateId)}
+                  >
+                    {g.pieceTemplateName}
+                  </button>
+                ))}
+              </div>
+            )
           }
         />
       )}
@@ -2492,6 +2535,7 @@ function PiecePools({
 }) {
   const { fromMM: convertFromMM, toMM: convertToMM, unitLabel, formatLength,
           kerfWidth: globalKerfWidth, optimizationStrategy: globalStrategy } = useSettings();
+  const isMobile = useIsMobile();
   const profileTypeLabel = useProfileTypeLabel();
   const floors = building.floors;
   const apartmentsPerFloor = building.apartmentsPerFloor;
@@ -2720,23 +2764,38 @@ function PiecePools({
         </span>
       </div>
 
-      <div className="flex items-center justify-between">
-        <div className="inline-flex items-center gap-0.5 rounded-md bg-muted p-0.5">
-          {allGroups.map((g) => (
-            <button
-              key={g.pieceTemplateId}
-              type="button"
-              className={`px-3 py-1 text-xs font-medium rounded-md transition-all ${
-                activeGroupId === g.pieceTemplateId
-                  ? "bg-background text-foreground shadow-sm"
-                  : "text-muted-foreground hover:text-foreground"
-              }`}
-              onClick={() => setActiveGroupId(g.pieceTemplateId)}
-            >
-              {g.pieceTemplateName}
-            </button>
-          ))}
-        </div>
+      <div className="flex items-center justify-between gap-2">
+        {isMobile ? (
+          <Select value={activeGroupId ?? undefined} onValueChange={(v) => v && setActiveGroupId(v)}>
+            <SelectTrigger className="h-8 text-xs w-full">
+              <SelectValue>
+                {allGroups.find((g) => g.pieceTemplateId === activeGroupId)?.pieceTemplateName ?? "Select..."}
+              </SelectValue>
+            </SelectTrigger>
+            <SelectContent>
+              {allGroups.map((g) => (
+                <SelectItem key={g.pieceTemplateId} value={g.pieceTemplateId}>{g.pieceTemplateName}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        ) : (
+          <div className="inline-flex items-center gap-0.5 rounded-md bg-muted p-0.5 shrink-0">
+            {allGroups.map((g) => (
+              <button
+                key={g.pieceTemplateId}
+                type="button"
+                className={`px-3 py-1 text-xs font-medium rounded-md transition-all ${
+                  activeGroupId === g.pieceTemplateId
+                    ? "bg-background text-foreground shadow-sm"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+                onClick={() => setActiveGroupId(g.pieceTemplateId)}
+              >
+                {g.pieceTemplateName}
+              </button>
+            ))}
+          </div>
+        )}
         {activeData && (
           <Badge variant="secondary" className="text-[10px]">{activeData.sizeGroups.length} sizes</Badge>
         )}

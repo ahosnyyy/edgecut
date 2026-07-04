@@ -69,7 +69,7 @@ export default function ProjectsList() {
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
-      <div className="flex items-center justify-between gap-3 px-4 py-3 shrink-0">
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 px-4 py-3 shrink-0">
         <div className="flex items-center gap-2">
           <h1 className="text-lg font-semibold">All Projects</h1>
           {projects && projects.length > 0 && (
@@ -78,8 +78,8 @@ export default function ProjectsList() {
             </Badge>
           )}
         </div>
-        <div className="flex items-center gap-2">
-          <div className="relative">
+        <div className="flex items-center gap-2 flex-wrap">
+          <div className="relative flex-1 min-w-[140px]">
             <HugeiconsIcon
               icon={Search01Icon}
               size={14}
@@ -89,14 +89,14 @@ export default function ProjectsList() {
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Search projects..."
-              className="w-48 pl-7 text-xs"
+              className="w-full pl-7 text-xs"
             />
           </div>
           <Select
             value={filterStatus}
             onValueChange={(v) => setFilterStatus(v ?? "all")}
           >
-            <SelectTrigger className="w-32 h-8 text-xs gap-1.5">
+            <SelectTrigger className="w-32 h-8 text-xs gap-1.5 shrink-0">
               <HugeiconsIcon icon={FilterIcon} size={14} className="text-muted-foreground" />
               <SelectValue>
                 {filterStatus === "all" ? "All Status" : filterStatus.charAt(0).toUpperCase() + filterStatus.slice(1)}
@@ -199,9 +199,9 @@ export default function ProjectsList() {
                     )}
                   </CardHeader>
                   <CardFooter className="bg-muted/50 py-2.5 mt-auto">
-                    <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
+                    <div className="flex items-center gap-2 text-[10px] text-muted-foreground flex-wrap">
                       <span>{p.completedBuildings}/{p.buildingCount} building{p.buildingCount !== 1 ? "s" : ""} completed</span>
-                      <Separator orientation="vertical" className="my-0.5" />
+                      <Separator orientation="vertical" className="my-0.5 hidden sm:block" />
                       <span>Created {new Date(p.createdAt).toLocaleDateString("en-GB")}</span>
                     </div>
                   </CardFooter>

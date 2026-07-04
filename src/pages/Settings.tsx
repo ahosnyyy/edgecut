@@ -48,7 +48,7 @@ export default function Settings() {
               </CardDescription>
             </CardHeader>
             <CardContent className="flex flex-col gap-4">
-              <div className="flex gap-4">
+              <div className="flex flex-col sm:flex-row gap-4">
                 <div className="flex flex-col gap-1.5 flex-1">
                   <Label className="text-xs text-muted-foreground">Measurement System</Label>
                   <Select
@@ -113,7 +113,7 @@ export default function Settings() {
               </CardDescription>
             </CardHeader>
             <CardContent className="flex flex-col gap-4">
-              <div className="flex gap-4">
+              <div className="flex flex-col sm:flex-row gap-4">
                 <div className="flex flex-col gap-1.5 flex-1">
                   <Label className="text-xs text-muted-foreground">Kerf Width ({UNITS[displayUnit].label})</Label>
                   <Input

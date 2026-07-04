@@ -17,6 +17,7 @@ import {
   type ProfileType,
 } from "../hooks/useProfileTypes";
 import TemplateManager from "./TemplateManager";
+import { useTemplates } from "../hooks/useTemplates";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select";
 import { Button } from "../components/ui/button";
 import { Card, CardAction, CardDescription, CardFooter, CardHeader, CardTitle } from "../components/ui/card";
@@ -232,7 +233,7 @@ function ProfileSystemEditor({ systemId, detail, isCreating, onClose }: EditorPr
         </DialogHeader>
 
         <div className="flex flex-col gap-3 shrink-0">
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div className="flex flex-col gap-1.5">
               <Label htmlFor="ps-name">Name <span className="text-red-500">*</span></Label>
               <Input
@@ -279,20 +280,22 @@ function ProfileSystemEditor({ systemId, detail, isCreating, onClose }: EditorPr
         {/* Scrollable: constants list */}
         <div className="flex flex-col gap-1.5 overflow-y-auto pr-1">
           {form.constants.map((c, i) => (
-            <div key={i} className="flex items-center gap-2 rounded-md border bg-muted/30 px-2 py-1.5">
-              <span className="text-[10px] text-muted-foreground w-4 shrink-0 text-center font-medium">{i + 1}</span>
-              <Input
-                value={c.name}
-                onChange={(e) => updateConstant(i, "name", e.target.value)}
-                placeholder="weldingAllowance"
-                className="font-mono text-xs h-7 border-0 bg-background w-36 shrink-0"
-              />
-              <Input
-                value={c.label}
-                onChange={(e) => updateConstant(i, "label", e.target.value)}
-                placeholder="Welding Allowance"
-                className="text-xs h-7 border-0 bg-background flex-1"
-              />
+            <div key={i} className="flex flex-col sm:flex-row sm:items-center gap-2 rounded-md border bg-muted/30 px-2 py-1.5">
+              <div className="flex items-center gap-2 flex-1 min-w-0">
+                <span className="text-[10px] text-muted-foreground w-4 shrink-0 text-center font-medium">{i + 1}</span>
+                <Input
+                  value={c.name}
+                  onChange={(e) => updateConstant(i, "name", e.target.value)}
+                  placeholder="weldingAllowance"
+                  className="font-mono text-xs h-7 border-0 bg-background w-full sm:w-36 shrink-0"
+                />
+                <Input
+                  value={c.label}
+                  onChange={(e) => updateConstant(i, "label", e.target.value)}
+                  placeholder="Welding Allowance"
+                  className="text-xs h-7 border-0 bg-background flex-1"
+                />
+              </div>
               <div className="flex items-center gap-1 shrink-0">
                 <Label className="text-[10px] text-muted-foreground">Default</Label>
                 <Input
@@ -302,15 +305,15 @@ function ProfileSystemEditor({ systemId, detail, isCreating, onClose }: EditorPr
                   className="text-xs h-7 w-20 border-0 bg-background"
                 />
                 <span className="text-[10px] text-muted-foreground shrink-0">{unitLabel}</span>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-6 w-6 text-muted-foreground hover:text-destructive shrink-0"
+                  onClick={() => removeConstant(i)}
+                >
+                  <HugeiconsIcon icon={Delete02Icon} size={12} />
+                </Button>
               </div>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-6 w-6 text-muted-foreground hover:text-destructive shrink-0"
-                onClick={() => removeConstant(i)}
-              >
-                <HugeiconsIcon icon={Delete02Icon} size={12} />
-              </Button>
             </div>
           ))}
           {form.constants.length === 0 && (
@@ -346,46 +349,50 @@ function ProfileSystemEditor({ systemId, detail, isCreating, onClose }: EditorPr
         {/* Scrollable: default pieces list */}
         <div className="flex flex-col gap-1.5 overflow-y-auto pr-1">
           {form.defaultPieces.map((p, i) => (
-            <div key={i} className="flex items-center gap-2 rounded-md border bg-muted/30 px-2 py-1.5">
-              <span className="text-[10px] text-muted-foreground w-4 shrink-0 text-center font-medium">{i + 1}</span>
-              <Input
-                value={p.label}
-                onChange={(e) => updatePiece(i, "label", e.target.value)}
-                placeholder="Frame Top"
-                className="text-xs h-7 border-0 bg-background w-28 shrink-0"
-              />
-              <select
-                value={p.profileType}
-                onChange={(e) => updatePiece(i, "profileType", e.target.value)}
-                className="text-xs h-7 border-0 bg-background rounded-md px-2 w-24 shrink-0"
-              >
-                {(profileTypes ?? []).map((pt) => (
-                  <option key={pt.key} value={pt.key}>{pt.label}</option>
-                ))}
-              </select>
-              <Input
-                value={p.lengthFormula}
-                onChange={(e) => updatePiece(i, "lengthFormula", e.target.value)}
-                placeholder="W - 2 * weldingAllowance"
-                className="font-mono text-xs h-7 border-0 bg-background flex-1"
-              />
-              <div className="flex items-center gap-1 shrink-0">
-                <Label className="text-[10px] text-muted-foreground">Qty</Label>
+            <div key={i} className="flex flex-col sm:flex-row sm:items-center gap-2 rounded-md border bg-muted/30 px-2 py-1.5">
+              <div className="flex items-center gap-2 flex-1 min-w-0">
+                <span className="text-[10px] text-muted-foreground w-4 shrink-0 text-center font-medium">{i + 1}</span>
                 <Input
-                  type="number"
-                  value={p.quantity}
-                  onChange={(e) => updatePiece(i, "quantity", parseInt(e.target.value) || 1)}
-                  className="text-xs h-7 w-14 border-0 bg-background"
+                  value={p.label}
+                  onChange={(e) => updatePiece(i, "label", e.target.value)}
+                  placeholder="Frame Top"
+                  className="text-xs h-7 border-0 bg-background w-full sm:w-28 shrink-0"
                 />
+                <select
+                  value={p.profileType}
+                  onChange={(e) => updatePiece(i, "profileType", e.target.value)}
+                  className="text-xs h-7 border-0 bg-background rounded-md px-2 w-full sm:w-24 shrink-0"
+                >
+                  {(profileTypes ?? []).map((pt) => (
+                    <option key={pt.key} value={pt.key}>{pt.label}</option>
+                  ))}
+                </select>
               </div>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-6 w-6 text-muted-foreground hover:text-destructive shrink-0"
-                onClick={() => removePiece(i)}
-              >
-                <HugeiconsIcon icon={Delete02Icon} size={12} />
-              </Button>
+              <div className="flex items-center gap-2">
+                <Input
+                  value={p.lengthFormula}
+                  onChange={(e) => updatePiece(i, "lengthFormula", e.target.value)}
+                  placeholder="W - 2 * weldingAllowance"
+                  className="font-mono text-xs h-7 border-0 bg-background flex-1"
+                />
+                <div className="flex items-center gap-1 shrink-0">
+                  <Label className="text-[10px] text-muted-foreground">Qty</Label>
+                  <Input
+                    type="number"
+                    value={p.quantity}
+                    onChange={(e) => updatePiece(i, "quantity", parseInt(e.target.value) || 1)}
+                    className="text-xs h-7 w-14 border-0 bg-background"
+                  />
+                </div>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-6 w-6 text-muted-foreground hover:text-destructive shrink-0"
+                  onClick={() => removePiece(i)}
+                >
+                  <HugeiconsIcon icon={Delete02Icon} size={12} />
+                </Button>
+              </div>
             </div>
           ))}
           {form.defaultPieces.length === 0 && (
@@ -608,7 +615,7 @@ function ProfileTypesTab({ search, setSearch }: { search: string; setSearch: (v:
                         <Button
                           variant="ghost"
                           size="sm"
-                          className="h-6 w-6 p-0 text-muted-foreground hover:text-foreground opacity-0 group-hover:opacity-100"
+                          className="h-6 w-6 p-0 text-muted-foreground hover:text-foreground opacity-100 md:opacity-0 md:group-hover:opacity-100"
                           onClick={(e) => { e.stopPropagation(); handleEdit(pt.id); }}
                         >
                           <HugeiconsIcon icon={PencilEdit01Icon} size={13} />
@@ -619,7 +626,7 @@ function ProfileTypesTab({ search, setSearch }: { search: string; setSearch: (v:
                                 <Button
                                   variant="ghost"
                                   size="sm"
-                                  className="h-6 w-6 p-0 text-muted-foreground hover:text-destructive opacity-0 group-hover:opacity-100"
+                                  className="h-6 w-6 p-0 text-muted-foreground hover:text-destructive opacity-100 md:opacity-0 md:group-hover:opacity-100"
                                 >
                                   <HugeiconsIcon icon={Delete02Icon} size={13} />
                                 </Button>
@@ -672,6 +679,7 @@ function ProfileTypesTab({ search, setSearch }: { search: string; setSearch: (v:
 export default function ProfileSystemManager() {
   const { data: systems, isLoading } = useProfileSystems();
   const { data: types } = useProfileTypes();
+  const { data: templates } = useTemplates();
 
   const deleteMutation = useDeleteProfileSystem();
   const [showCreate, setShowCreate] = useState(false);
@@ -722,19 +730,28 @@ export default function ProfileSystemManager() {
           <h1 className="text-lg font-semibold">
             {activeTab === "types" ? "Profile Types" : activeTab === "systems" ? "Profile Systems" : "Piece Templates"}
           </h1>
+          {activeTab === "systems" && systems && systems.length > 0 && (
+            <Badge variant="secondary" className="text-xs">{systems.length}</Badge>
+          )}
+          {activeTab === "types" && types && types.length > 0 && (
+            <Badge variant="secondary" className="text-xs">{types.length}</Badge>
+          )}
+          {activeTab === "templates" && templates && templates.length > 0 && (
+            <Badge variant="secondary" className="text-xs">{templates.length}</Badge>
+          )}
         </div>
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col overflow-hidden">
-        <div className="flex items-center justify-between gap-3 px-4 py-3 shrink-0">
-          <TabsList>
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 px-4 py-3 shrink-0">
+          <TabsList className="shrink-0">
             <TabsTrigger value="systems" className="px-4">Systems</TabsTrigger>
             <TabsTrigger value="types" className="px-4">Types</TabsTrigger>
             <TabsTrigger value="templates" className="px-4">Templates</TabsTrigger>
           </TabsList>
-          <TabsContent value="systems" className="flex-1">
-            <div className="flex items-center justify-end gap-2">
-              <div className="relative">
+          <TabsContent value="systems" className="md:flex-none">
+            <div className="flex items-center gap-2 flex-wrap">
+              <div className="relative flex-1 md:flex-none md:w-48 min-w-[140px]">
                 <HugeiconsIcon
                   icon={Search01Icon}
                   size={14}
@@ -744,14 +761,14 @@ export default function ProfileSystemManager() {
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
                   placeholder="Search by name or key..."
-                  className="w-48 pl-7 text-xs"
+                  className="w-full pl-7 h-8 text-xs"
                 />
               </div>
             </div>
           </TabsContent>
-          <TabsContent value="types" className="flex-1">
-            <div className="flex items-center justify-end gap-2">
-              <div className="relative">
+          <TabsContent value="types" className="md:flex-none">
+            <div className="flex items-center gap-2 flex-wrap">
+              <div className="relative flex-1 md:flex-none md:w-48 min-w-[140px]">
                 <HugeiconsIcon
                   icon={Search01Icon}
                   size={14}
@@ -761,14 +778,14 @@ export default function ProfileSystemManager() {
                   value={typesSearch}
                   onChange={(e) => setTypesSearch(e.target.value)}
                   placeholder="Search by key or label..."
-                  className="w-48 pl-7 text-xs"
+                  className="w-full pl-7 h-8 text-xs"
                 />
               </div>
             </div>
           </TabsContent>
-          <TabsContent value="templates" className="flex-1">
-            <div className="flex items-center justify-end gap-2">
-              <div className="relative">
+          <TabsContent value="templates" className="md:flex-none">
+            <div className="flex items-center gap-2 flex-wrap">
+              <div className="relative flex-1 md:flex-none md:w-48 min-w-[140px]">
                 <HugeiconsIcon
                   icon={Search01Icon}
                   size={14}
@@ -778,14 +795,14 @@ export default function ProfileSystemManager() {
                   value={templatesSearch}
                   onChange={(e) => setTemplatesSearch(e.target.value)}
                   placeholder="Search by name..."
-                  className="w-48 pl-7 text-xs"
+                  className="w-full pl-7 h-8 text-xs"
                 />
               </div>
               <Select
                 value={templatesFilterType}
                 onValueChange={(v) => setTemplatesFilterType(v ?? "all")}
               >
-                <SelectTrigger className="w-32 h-8 text-xs gap-1.5">
+                <SelectTrigger className="w-32 h-8 text-xs gap-1.5 shrink-0">
                   <HugeiconsIcon icon={FilterIcon} size={14} className="text-muted-foreground" />
                   <SelectValue>
                     {templatesFilterType === "all" ? "All Types" : templatesFilterType === "window" ? "Windows" : "Doors"}
@@ -897,7 +914,7 @@ export default function ProfileSystemManager() {
                           <Button
                             variant="ghost"
                             size="sm"
-                            className="h-6 w-6 p-0 text-muted-foreground hover:text-foreground opacity-0 group-hover:opacity-100"
+                            className="h-6 w-6 p-0 text-muted-foreground hover:text-foreground opacity-100 md:opacity-0 md:group-hover:opacity-100"
                             onClick={(e) => { e.stopPropagation(); handleEdit(sys.id); }}
                           >
                             <HugeiconsIcon icon={PencilEdit01Icon} size={13} />
@@ -908,7 +925,7 @@ export default function ProfileSystemManager() {
                             <Button
                               variant="ghost"
                               size="sm"
-                              className="h-6 w-6 p-0 text-muted-foreground hover:text-destructive opacity-0 group-hover:opacity-100"
+                              className="h-6 w-6 p-0 text-muted-foreground hover:text-destructive opacity-100 md:opacity-0 md:group-hover:opacity-100"
                             >
                               <HugeiconsIcon icon={Delete02Icon} size={13} />
                             </Button>

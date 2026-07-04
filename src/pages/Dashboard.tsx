@@ -202,7 +202,7 @@ export default function Dashboard() {
                   return Array.from(bySystem.entries()).map(([system, types]) => (
                     <div key={system} className="flex flex-col gap-2">
                       <span className="text-sm font-semibold capitalize">{system}</span>
-                      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-2">
                         {types.map((d) => {
                           const covPct = d.unlimited
                             ? 100
@@ -270,7 +270,7 @@ export default function Dashboard() {
 
                               {/* Bars to cover */}
                               {d.deficitBars > 0 && (
-                                <div className="flex items-center gap-1.5 rounded bg-destructive/10 px-2 py-1 text-[9px] text-destructive font-medium">
+                                <div className="flex items-center gap-1.5 rounded bg-destructive/10 px-2 py-1 text-[9px] text-destructive font-medium flex-wrap">
                                   <span className="tabular-nums">−{formatLength(d.demandLength - d.availableLength, false)}{unitLabel}</span>
                                   <span className="text-destructive/40">·</span>
                                   <span className="tabular-nums">{d.deficitBars} bar{d.deficitBars !== 1 ? "s" : ""}</span>
