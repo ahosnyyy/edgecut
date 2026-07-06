@@ -35,7 +35,7 @@ export default function Settings() {
       </div>
 
       <div className="flex-1 overflow-auto p-4">
-        <div className="max-w-lg flex flex-col gap-4">
+        <div className="max-w-lg w-full flex flex-col gap-4">
 
           <Card>
             <CardHeader>

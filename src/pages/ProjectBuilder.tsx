@@ -88,6 +88,7 @@ import { HugeiconsIcon } from "@hugeicons/react";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "../components/ui/tabs";
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "../components/ui/empty";
 import { Tooltip, TooltipTrigger, TooltipContent } from "../components/ui/tooltip";
+import { Popover, PopoverTrigger, PopoverContent } from "../components/ui/popover";
 import { useSettings } from "../hooks/useSettings";
 import { useTemplate, type TemplatePiece } from "../hooks/useTemplates";
 import { useProfileSystems, type SystemConstant } from "../hooks/useProfileSystems";
@@ -1194,7 +1195,7 @@ function ProjectSettings({
               </div>
               <ConfirmDialog
                 trigger={
-                  <Button variant="outline" className="gap-1.5 shrink-0 w-36 justify-center" disabled={status === "archived" || isArchiving}>
+                  <Button variant="outline" className="gap-1.5 shrink-0 w-full sm:w-36 justify-center" disabled={status === "archived" || isArchiving}>
                     <HugeiconsIcon icon={ArchiveArrowDownIcon} size={14} />
                     Archive Project
                   </Button>
@@ -1215,7 +1216,7 @@ function ProjectSettings({
               </div>
               <ConfirmDialog
                 trigger={
-                  <Button variant="outline" className="text-destructive hover:bg-destructive/10 hover:text-destructive gap-1.5 shrink-0 w-36 justify-center" disabled={isDeleting}>
+                  <Button variant="outline" className="text-destructive hover:bg-destructive/10 hover:text-destructive gap-1.5 shrink-0 w-full sm:w-36 justify-center" disabled={isDeleting}>
                     <HugeiconsIcon icon={Delete02Icon} size={14} />
                     Delete Project
                   </Button>
@@ -1431,19 +1432,19 @@ function BuildingSettings({
   };
 
   return (
-    <div className="flex flex-col gap-4 max-w-2xl">
+    <div className="flex flex-col gap-4 max-w-2xl w-full">
       <Card>
         <CardHeader>
           <CardTitle className="text-sm">General</CardTitle>
           <CardDescription className="text-xs">Building configuration and apartment layout.</CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-4">
-          <div className="grid grid-cols-[120px_1fr] items-center gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-[120px_1fr] items-center gap-2 sm:gap-3">
             <Label htmlFor="b-name" className="text-xs text-muted-foreground">Name</Label>
             <Input id="b-name" value={name} onChange={(e) => setName(e.target.value)} className="h-8 text-xs" />
           </div>
           <Separator />
-          <div className="grid grid-cols-[120px_1fr_1fr] items-center gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-[120px_1fr_1fr] items-center gap-2 sm:gap-3">
             <Label className="text-xs text-muted-foreground">Layout</Label>
             <div className="flex items-center gap-2">
               <Input type="number" min={1} value={floors} onChange={(e) => setFloors(parseInt(e.target.value) || 1)} className="h-8 text-xs w-24" />
@@ -1455,7 +1456,7 @@ function BuildingSettings({
             </div>
           </div>
           <Separator />
-          <div className="grid grid-cols-[120px_1fr] items-start gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-[120px_1fr] items-start gap-2 sm:gap-3">
             <Label className="text-xs text-muted-foreground pt-1.5">Floor Labels</Label>
             <div className="flex flex-wrap gap-1.5">
               {Array.from({ length: floors }, (_, i) => (
@@ -1464,7 +1465,7 @@ function BuildingSettings({
             </div>
           </div>
           <Separator />
-          <div className="grid grid-cols-[120px_1fr] items-center gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-[120px_1fr] items-center gap-2 sm:gap-3">
             <Label htmlFor="b-status" className="text-xs text-muted-foreground">Status</Label>
             <Select value={status} onValueChange={(v) => setStatus(v as BuildingLike["status"])}>
               <SelectTrigger id="b-status" className="h-8 text-xs w-40">
@@ -1495,14 +1496,14 @@ function BuildingSettings({
             <CardDescription className="text-xs">Irreversible and destructive actions.</CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="flex items-center justify-between gap-3">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div className="flex flex-col gap-0.5">
                 <span className="text-xs font-medium">Delete this building</span>
                 <span className="text-xs text-muted-foreground">All floor assignments, opening sizes, and piece pools for this building will be lost.</span>
               </div>
               <ConfirmDialog
                 trigger={
-                  <Button variant="outline" className="text-destructive hover:bg-destructive/10 hover:text-destructive gap-1.5 shrink-0 w-36 justify-center" disabled={isDeletingBuilding}>
+                  <Button variant="outline" className="text-destructive hover:bg-destructive/10 hover:text-destructive gap-1.5 shrink-0 w-full sm:w-36 justify-center" disabled={isDeletingBuilding}>
                     <HugeiconsIcon icon={Delete02Icon} size={14} />
                     Delete Building
                   </Button>
@@ -1835,9 +1836,9 @@ function FloorAssignments({
             {building.floors} floors × {building.apartmentsPerFloor} apts · {building.floors * building.apartmentsPerFloor} total
           </span>
         </div>
-        <div className="flex items-center gap-2 shrink-0">
+        <div className="flex items-center gap-2 sm:shrink-0 w-full sm:w-auto">
           <Select value={fillAllValue} onValueChange={(v: string | null) => v && handleFillAll(v)}>
-            <SelectTrigger className="w-40 h-7 text-xs">
+            <SelectTrigger className="flex-1 sm:w-40 h-7 text-xs">
               <span className="text-muted-foreground">Fill all...</span>
             </SelectTrigger>
             <SelectContent>
@@ -1846,7 +1847,7 @@ function FloorAssignments({
               ))}
             </SelectContent>
           </Select>
-          <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => handleFillAll(null)}>
+          <Button variant="outline" size="sm" className="h-7 text-xs shrink-0" onClick={() => handleFillAll(null)}>
             Clear
           </Button>
         </div>
@@ -2390,24 +2391,26 @@ function OpeningSizeGrid({
 
   return (
     <div className="flex flex-col gap-2">
-      <div className="flex items-center justify-between gap-2 flex-wrap">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
         {groupChips}
-        <div className="flex items-center gap-1">
-          <Input
-            type="number"
-            placeholder={`W (${unitLabel})`}
-            value={bulkW}
-            onChange={(e) => setBulkW(e.target.value)}
-            className="w-20 h-7 text-xs"
-          />
-          <span className="text-xs text-muted-foreground">×</span>
-          <Input
-            type="number"
-            placeholder={`H (${unitLabel})`}
-            value={bulkH}
-            onChange={(e) => setBulkH(e.target.value)}
-            className="w-20 h-7 text-xs"
-          />
+        <div className="flex items-center gap-2 w-full sm:w-auto">
+          <div className="flex items-center gap-1 shrink-0">
+            <Input
+              type="number"
+              placeholder={`W (${unitLabel})`}
+              value={bulkW}
+              onChange={(e) => setBulkW(e.target.value)}
+              className="w-16 sm:w-20 h-7 text-xs"
+            />
+            <span className="text-xs text-muted-foreground">×</span>
+            <Input
+              type="number"
+              placeholder={`H (${unitLabel})`}
+              value={bulkH}
+              onChange={(e) => setBulkH(e.target.value)}
+              className="w-16 sm:w-20 h-7 text-xs"
+            />
+          </div>
           <Select onValueChange={(v: string | null) => {
             if (!v) return;
             if (v === "all") {
@@ -2417,7 +2420,7 @@ function OpeningSizeGrid({
               if (group && bulkW && bulkH) onFillBucket(groupPieceTemplateId, bulkW, bulkH, group.cells);
             }
           }}>
-            <SelectTrigger className="w-40 h-7 text-xs">
+            <SelectTrigger className="flex-1 sm:w-40 h-7 text-xs">
               <span className="text-muted-foreground">Fill all...</span>
             </SelectTrigger>
             <SelectContent>
@@ -2434,7 +2437,7 @@ function OpeningSizeGrid({
           </Select>
           <Button
             variant="outline"
-            className="h-7 text-xs"
+            className="h-7 text-xs shrink-0"
             onClick={() => onClearAll(groupPieceTemplateId)}
           >
             Clear
@@ -2841,18 +2844,44 @@ function PiecePools({
                           <span className="text-xs">{group.count}</span>
                         </TableCell>
                         <TableCell className="py-3 px-4 text-center">
-                          <div className="grid grid-cols-4 gap-0.5 w-fit mx-auto">
-                            {group.locations.map((loc, i) => {
-                              const m = loc.match(/^(\d+)×(.+)$/);
-                              const count = m ? m[1] : "1";
-                              const label = m ? m[2] : loc;
-                              return (
-                                <span key={i} className="text-xs text-muted-foreground text-center leading-tight py-0.5 px-0.5 rounded border border-border/60 w-12">
-                                  <span className="text-[10px]">{count}×</span>{label}
-                                </span>
-                              );
-                            })}
-                          </div>
+                          {isMobile ? (
+                            <Popover>
+                              <PopoverTrigger
+                                render={
+                                  <button className="text-xs text-muted-foreground rounded border border-border/60 px-2 py-1 hover:text-foreground hover:border-border whitespace-nowrap">
+                                    {group.locations.length} {group.locations.length === 1 ? "loc" : "locs"}
+                                  </button>
+                                }
+                              />
+                              <PopoverContent className="w-auto max-w-[80vw] p-2">
+                                <div className="grid grid-cols-4 gap-0.5">
+                                  {group.locations.map((loc, i) => {
+                                    const m = loc.match(/^(\d+)×(.+)$/);
+                                    const count = m ? m[1] : "1";
+                                    const label = m ? m[2] : loc;
+                                    return (
+                                      <span key={i} className="text-xs text-muted-foreground text-center leading-tight py-0.5 px-0.5 rounded border border-border/60 w-12">
+                                        <span className="text-[10px]">{count}×</span>{label}
+                                      </span>
+                                    );
+                                  })}
+                                </div>
+                              </PopoverContent>
+                            </Popover>
+                          ) : (
+                            <div className="grid grid-cols-4 gap-0.5 w-fit mx-auto">
+                              {group.locations.map((loc, i) => {
+                                const m = loc.match(/^(\d+)×(.+)$/);
+                                const count = m ? m[1] : "1";
+                                const label = m ? m[2] : loc;
+                                return (
+                                  <span key={i} className="text-xs text-muted-foreground text-center leading-tight py-0.5 px-0.5 rounded border border-border/60 w-12">
+                                    <span className="text-[10px]">{count}×</span>{label}
+                                  </span>
+                                );
+                              })}
+                            </div>
+                          )}
                         </TableCell>
                         <TableCell className="py-3 px-4 text-center">
                           <span className="text-xs font-mono">{group.avgW}</span>

@@ -382,7 +382,7 @@ export function OptimizationTab({
   const [hasOptimized, setHasOptimized] = useState(false);
 
   // ── Cutting plan persistence (save / apply / un-apply / delete) ──
-  const { data: savedPlans } = useCuttingPlans(projectId, "building", building.id);
+  const { data: savedPlans, isLoading: isLoadingPlans } = useCuttingPlans(projectId, "building", building.id);
   const savePlanMutation = useSaveCuttingPlan();
   const updatePlanMutation = useUpdateCuttingPlan();
   const applyMutation = useApplyCuttingPlan();
@@ -656,8 +656,9 @@ export function OptimizationTab({
 
   const isLoading = templateQueries.some((q) => q.isLoading);
   const isLoadingTemplate = !!activeGroupId && !templateDetail;
+  const isLoadingSavedPlan = !!savedPlan && !state.isOptimized && !hasOptimized;
 
-  if (isLoading || isLoadingTemplate) {
+  if (isLoading || isLoadingTemplate || isLoadingPlans) {
     return <LoadingState label="Loading optimization data..." />;
   }
 
@@ -973,8 +974,13 @@ export function OptimizationTab({
         </DialogContent>
       </Dialog>
 
+      {/* Loading saved plan */}
+      {isLoadingSavedPlan && (
+        <LoadingState label="Loading saved plan..." />
+      )}
+
       {/* Empty state */}
-      {activePool && activePool.stock.length > 0 && !state.isOptimized && (
+      {activePool && activePool.stock.length > 0 && !state.isOptimized && !isLoadingSavedPlan && (
         <Card className="border-dashed">
           <CardContent className="flex flex-col items-center justify-center py-16 text-center">
             <HugeiconsIcon icon={ScissorIcon} size={32} className="text-muted-foreground mb-3" />
