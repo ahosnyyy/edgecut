@@ -2447,9 +2447,9 @@ function OpeningSizeGrid({
 
       <div className="overflow-x-auto">
         <Table>
-          <TableHeader className="sticky top-0 z-10 bg-muted/50 backdrop-blur-sm">
+          <TableHeader className="sticky top-0 z-20 bg-muted/50 backdrop-blur-sm">
             <TableRow className="border-b hover:bg-transparent">
-              <TableHead className="h-9 text-xs w-24 font-semibold">{groupLabel}</TableHead>
+              <TableHead className="h-9 text-xs w-24 font-semibold sticky left-0 z-30 bg-muted">{groupLabel}</TableHead>
               {Array.from({ length: apartmentsPerFloor }, (_, i) => (
                 <TableHead key={i} className="h-9 text-xs text-center font-semibold">
                   Apartment {i + 1}
@@ -2460,7 +2460,7 @@ function OpeningSizeGrid({
           <TableBody>
             {Array.from({ length: floors }, (_, f) => (
               <TableRow key={f} className="group">
-                <TableCell className="text-xs font-medium py-1.5 text-muted-foreground group-hover:text-foreground">Floor {floorLabels[f] ?? String.fromCharCode(65 + f)}</TableCell>
+                <TableCell className="text-xs font-medium py-1.5 text-muted-foreground group-hover:text-foreground sticky left-0 z-10 bg-background">Floor {floorLabels[f] ?? String.fromCharCode(65 + f)}</TableCell>
                 {Array.from({ length: apartmentsPerFloor }, (_, i) => {
                   const openings = cellOpenings(f, i);
                   const hasOpenings = openings.length > 0;
@@ -2811,9 +2811,9 @@ function PiecePools({
           ) : (
             <div className="overflow-x-auto">
               <Table>
-                <TableHeader className="sticky top-0 z-10 bg-muted/50 backdrop-blur-sm">
+                <TableHeader className="sticky top-0 z-20 bg-muted/50 backdrop-blur-sm">
                   <TableRow className="border-b hover:bg-transparent">
-                    <TableHead rowSpan={2} className="h-9 text-xs w-24 font-semibold align-middle">{activeData.group.pieceTemplateName}</TableHead>
+                    <TableHead rowSpan={2} className="h-9 text-xs w-24 font-semibold align-middle sticky left-0 z-30 bg-muted">{activeData.group.pieceTemplateName}</TableHead>
                     <TableHead rowSpan={2} className="h-9 text-xs text-center font-semibold align-middle">Qty</TableHead>
                     <TableHead rowSpan={2} className="h-9 text-xs text-center font-semibold align-middle">Locations</TableHead>
                     <TableHead rowSpan={2} className="h-9 text-xs text-center font-semibold align-middle">Width ({unitLabel})</TableHead>
@@ -2837,7 +2837,7 @@ function PiecePools({
                   {activeData.sizeGroups.map((group, idx) => (
                     <Fragment key={idx}>
                       <TableRow className="group">
-                        <TableCell className="text-xs font-medium py-1.5 text-muted-foreground group-hover:text-foreground">
+                        <TableCell className="text-xs font-medium py-1.5 text-muted-foreground group-hover:text-foreground sticky left-0 z-10 bg-background">
                           Size {idx + 1}
                         </TableCell>
                         <TableCell className="py-3 px-4 text-center">
@@ -2896,7 +2896,8 @@ function PiecePools({
                         ))}
                       </TableRow>
                       <TableRow key={`sub-${idx}`} className="border-b bg-muted/30">
-                        <TableCell colSpan={3} className="py-1 px-4" />
+                        <TableCell className="py-1 px-4 sticky left-0 z-10 bg-background" />
+                        <TableCell colSpan={2} className="py-1 px-4" />
                         <TableCell className="py-1 px-4 text-[12px] text-muted-foreground text-center">
                           —
                         </TableCell>
