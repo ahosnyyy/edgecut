@@ -2,6 +2,7 @@
 
 import * as React from "react"
 import { Link, useLocation } from "react-router-dom"
+import { useEffect } from "react"
 
 import { NavGroup, type NavItem } from "@/components/nav-main"
 import { NavUser } from "@/components/nav-user"
@@ -99,13 +100,20 @@ function RecentProjects() {
 }
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
+  const { pathname } = useLocation()
+  const { setOpenMobile, isMobile } = useSidebar()
+
+  useEffect(() => {
+    if (isMobile) setOpenMobile(false)
+  }, [pathname, isMobile, setOpenMobile])
+
   return (
     <Sidebar collapsible="icon" variant="inset" {...props}>
       <SidebarHeader>
-        <div className="relative flex items-center py-1.5 transition-all duration-200 ease-linear group-data-[collapsible=icon]:justify-center">
-          <img src="/logo.svg" alt="Edgecut" className="h-5 w-auto px-2 transition-opacity duration-200 ease-linear opacity-100 group-data-[collapsible=icon]:opacity-0 group-data-[collapsible=icon]:absolute" />
-          <img src="/logo-mark.svg" alt="Edgecut" className="h-5 w-auto transition-opacity duration-200 ease-linear opacity-0 absolute group-data-[collapsible=icon]:opacity-100 group-data-[collapsible=icon]:static" />
-        </div>
+        <Link to="/dashboard" aria-label="Edgecut home" className="relative flex w-full min-w-0 items-center overflow-hidden py-1.5">
+          <img src="/logo.svg" alt="Edgecut" className="h-5 w-auto max-w-none shrink-0 px-2 transition-opacity duration-200 ease-linear group-data-[collapsible=icon]:opacity-0" />
+          <img src="/logo-mark.svg" alt="Edgecut" className="absolute left-0 top-1/2 h-5 w-auto max-w-none shrink-0 -translate-y-1/2 px-2 opacity-0 transition-opacity duration-200 ease-linear group-data-[collapsible=icon]:opacity-100" />
+        </Link>
       </SidebarHeader>
       <SidebarContent>
         <NavGroup label="Workspace" items={workspaceNav} />
